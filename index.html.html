@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>EduTrack — Gestion Scolaire</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;width:100%}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#F4F7FC;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font-family:inherit}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:#F4F7FC}
+::-webkit-scrollbar-thumb{background:#D8E2F0;border-radius:4px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect}=React;
+
+// ── COULEURS ──────────────────────────────────────────────────────
+const C={
+  navy:"#0D2B5E",blue:"#1A4FA0",accent:"#F5A623",green:"#27AE60",
+  red:"#E53E3E",gray:"#6B7A8D",border:"#D8E2F0",light:"#EEF3FB",
+  bg:"#F4F7FC",white:"#FFFFFF",purple:"#6B21A8",orange:"#E67E22",teal:"#0E7C7B"
+};
+
+// ── CONSTANTES ────────────────────────────────────────────────────
+const NIVEAUX_COLLEGE=["6ème","5ème","4ème","3ème"];
+const NIVEAUX_LYCEE=["2nde","1ère","Terminale"];
+const SECTIONS=["A","B","C","D","E"];
+const FILIERES=["Générale","Scientifique","Littéraire","Économique","Technique"];
+
+const COMPTES=[
+  {id:1,identifiant:"admin",    mdp:"admin123", role:"admin",     nom:"M. Kouamé Directeur",av:"KD"},
+  {id:2,identifiant:"prof.math",mdp:"prof123",  role:"enseignant",nom:"Mme Kouassi",        av:"MK"},
+  {id:3,identifiant:"parent.aya",mdp:"parent123",role:"parent",  nom:"M. Konan (Parent)",  av:"MK",eleveId:1},
+  {id:4,identifiant:"aya.konan",mdp:"eleve123", role:"eleve",    nom:"Konan Aya",           av:"KA",eleveId:1},
+];
+
+const ROLE_META={
+  admin:     {label:"Administrateur",icon:"🏫",color:C.navy,  bg:"#E8EEF9"},
+  enseignant:{label:"Enseignant",    icon:"👨‍🏫",color:C.blue,  bg:"#EEF3FB"},
+  parent:    {label:"Parent",        icon:"👨‍👩‍👧",color:C.purple,bg:"#F3E8FF"},
+  eleve:     {label:"Élève",         icon:"🎒", color:C.green, bg:"#E8F8EE"},
+};
+
+const NOTES_DEF=[
+  {m:"Mathématiques",n:10,c:4},{m:"Français",n:10,c:3},{m:"Sciences",n:10,c:3},
+  {m:"Histoire-Géo",n:10,c:2},{m:"Anglais",n:10,c:2},{m:"EPS",n:10,c:1},
+];
+
+const DB_DEFAULT={
+  classes:[
+    {id:1,niveau:"6ème",    section:"A",filiere:null,          annee:"2025-2026",effectif_max:35},
+    {id:2,niveau:"5ème",    section:"B",filiere:null,          annee:"2025-2026",effectif_max:35},
+    {id:3,niveau:"Terminale",section:"A",filiere:"Scientifique",annee:"2025-2026",effectif_max:40},
+  ],
+  eleves:[
+    {id:1,nom:"Konan", prenom:"Aya",   classe_id:1,av:"KA",email_parent:"konan.parent@email.com", genre:"F",date_naissance:"12/03/2013"},
+    {id:2,nom:"Diallo",prenom:"Moussa",classe_id:2,av:"DM",email_parent:"diallo.parent@email.com",genre:"M",date_naissance:"05/07/2012"},
+    {id:3,nom:"Yao",   prenom:"Prisca",classe_id:1,av:"YP",email_parent:"yao.parent@email.com",   genre:"F",date_naissance:"22/11/2013"},
+    {id:4,nom:"Bamba", prenom:"Issouf",classe_id:2,av:"BI",email_parent:"bamba.parent@email.com", genre:"M",date_naissance:"08/04/2012"},
+  ],
+  notes:{
+    1:[{m:"Mathématiques",n:15,c:4},{m:"Français",n:13,c:3},{m:"Sciences",n:16,c:3},{m:"Histoire-Géo",n:12,c:2},{m:"Anglais",n:14,c:2},{m:"EPS",n:17,c:1}],
+    2:[{m:"Mathématiques",n:10,c:4},{m:"Français",n:11,c:3},{m:"Sciences",n:12,c:3},{m:"Histoire-Géo",n:9, c:2},{m:"Anglais",n:13,c:2},{m:"EPS",n:14,c:1}],
+    3:[{m:"Mathématiques",n:18,c:4},{m:"Français",n:16,c:3},{m:"Sciences",n:17,c:3},{m:"Histoire-Géo",n:15,c:2},{m:"Anglais",n:16,c:2},{m:"EPS",n:18,c:1}],
+    4:[{m:"Mathématiques",n:8, c:4},{m:"Français",n:9, c:3},{m:"Sciences",n:10,c:3},{m:"Histoire-Géo",n:7, c:2},{m:"Anglais",n:11,c:2},{m:"EPS",n:13,c:1}],
+  },
+  presences:{
+    1:[{date:"23/06/2026",s:"Présent"},{date:"22/06/2026",s:"Absent",motif:"Maladie"},{date:"21/06/2026",s:"Présent"},{date:"20/06/2026",s:"Retard",motif:"Transport"}],
+    2:[{date:"23/06/2026",s:"Absent",motif:"Non justifié"},{date:"22/06/2026",s:"Présent"},{date:"21/06/2026",s:"Présent"},{date:"20/06/2026",s:"Présent"}],
+    3:[{date:"23/06/2026",s:"Présent"},{date:"22/06/2026",s:"Présent"},{date:"21/06/2026",s:"Présent"},{date:"20/06/2026",s:"Présent"}],
+    4:[{date:"23/06/2026",s:"Absent",motif:"Maladie"},{date:"22/06/2026",s:"Absent",motif:"Non justifié"},{date:"21/06/2026",s:"Présent"},{date:"20/06/2026",s:"Absent"}],
+  },
+  emails_envoyes:[],
+  visites:[
+    {id:1,type:"Visite domiciliaire",eleve:"Konan Aya",   classe:"6ème A",motif:"Absentéisme répété",  date:"20/06/2026",heure:"09h00",responsable:"Mme Kouassi",statut:"Réalisée",  observations:"Famille sensibilisée. Mère s'engage à accompagner l'enfant.",suivi:"Situation stabilisée."},
+    {id:2,type:"Visite scolaire",    eleve:"Bamba Issouf",classe:"3ème C",motif:"Résultats en baisse", date:"25/06/2026",heure:"10h30",responsable:"M. Directeur",statut:"Planifiée", observations:"",suivi:""},
+    {id:3,type:"Visite d'urgence",   eleve:"Diallo Moussa",classe:"5ème B",motif:"Protection de l'enfant",date:"18/06/2026",heure:"14h00",responsable:"Mme Kouassi",statut:"Réalisée",observations:"Situation délicate. Parents convoqués.",suivi:"Suivi rapproché planifié."},
+  ],
+  signalements:[
+    {id:1,type:"Violence physique",  eleve:"Bamba Issouf",    classe:"3ème C",date:"15/06/2026",gravite:"Modéré",statut:"Pris en charge",   signale_par:"Enseignant",description:"L'élève est venu avec des traces de coups sur les bras.",          mesures:"Convocation des parents. Cellule d'écoute activée.",confidentiel:true},
+    {id:2,type:"Grossesse précoce",  eleve:"Élève anonymisée",classe:"4ème A",date:"10/06/2026",gravite:"Grave", statut:"En investigation",  signale_par:"Parent",    description:"Situation portée à la connaissance de la direction par un parent.",mesures:"Entretien confidentiel prévu.",confidentiel:true},
+    {id:3,type:"Harcèlement scolaire",eleve:"Konan Aya",      classe:"6ème A",date:"20/06/2026",gravite:"Faible",statut:"Résolu",            signale_par:"Élève",     description:"Moqueries récurrentes de camarades.",                              mesures:"Médiation réalisée.",confidentiel:false},
+  ],
+};
+
+// ── UTILITAIRES ───────────────────────────────────────────────────
+const calcMoy  =n=>n&&n.length?Math.round(n.reduce((s,x)=>s+x.n*x.c,0)/n.reduce((s,x)=>s+x.c,0)*10)/10:0;
+const countAbs =p=>p?p.filter(x=>x.s==="Absent").length:0;
+const ini      =(p,n)=>((p||"")[0]+(n||"")[0]).toUpperCase();
+const fullName =e=>`${e.prenom} ${e.nom}`;
+const lblCls   =c=>`${c.niveau} ${c.section}${c.filiere?` (${c.filiere})`:""}`;
+const cycleCls =c=>NIVEAUX_COLLEGE.includes(c.niveau)?"Collège":"Lycée";
+const nowStr   =()=>new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+
+// ── HOOK DB ───────────────────────────────────────────────────────
+function useDB(){
+  const [db,setDb]=useState(null);
+  const [saving,setSaving]=useState(false);
+  useEffect(()=>{
+    try{const r=localStorage.getItem("edutrack-html-v1");setDb(r?JSON.parse(r):JSON.parse(JSON.stringify(DB_DEFAULT)));}
+    catch{setDb(JSON.parse(JSON.stringify(DB_DEFAULT)));}
+  },[]);
+  function save(d){
+    setSaving(true);
+    try{localStorage.setItem("edutrack-html-v1",JSON.stringify(d));}catch{}
+    setDb(d);setTimeout(()=>setSaving(false),600);
+  }
+  const cl=()=>JSON.parse(JSON.stringify(db));
+  return{
+    db,saving,
+    addClass(c)    {const d=cl();const id=Math.max(0,...d.classes.map(x=>x.id))+1;d.classes.push({...c,id});save(d);},
+    deleteClass(id){const d=cl();d.eleves=d.eleves.map(e=>e.classe_id===id?{...e,classe_id:null}:e);d.classes=d.classes.filter(c=>c.id!==id);save(d);},
+    addEleve(e)    {const d=cl();const id=Math.max(0,...d.eleves.map(x=>x.id))+1;d.eleves.push({...e,id,av:ini(e.prenom,e.nom)});d.notes[id]=JSON.parse(JSON.stringify(NOTES_DEF));d.presences[id]=[];save(d);},
+    deleteEleve(id){const d=cl();d.eleves=d.eleves.filter(e=>e.id!==id);delete d.notes[id];delete d.presences[id];save(d);},
+    moveEleve(eid,cid){const d=cl();const e=d.eleves.find(x=>x.id===eid);if(e)e.classe_id=cid;save(d);},
+    updateNote(eid,i,v){const d=cl();if(d.notes[eid])d.notes[eid][i].n=v;save(d);},
+    addEmail(em)   {const d=cl();d.emails_envoyes=[em,...(d.emails_envoyes||[])];save(d);},
+    addVisite(v)   {const d=cl();d.visites=[{...v,id:Date.now()},...(d.visites||[])];save(d);},
+    updVisite(id,p){const d=cl();d.visites=d.visites.map(v=>v.id===id?{...v,...p}:v);save(d);},
+    addSignal(s)   {const d=cl();d.signalements=[{...s,id:Date.now()},...(d.signalements||[])];save(d);},
+    updSignal(id,p){const d=cl();d.signalements=d.signalements.map(s=>s.id===id?{...s,...p}:s);save(d);},
+    resetDB()      {save(JSON.parse(JSON.stringify(DB_DEFAULT)));},
+  };
+}
+
+// ── COMPOSANTS UI ─────────────────────────────────────────────────
+const Av=({t,size=38,bg=C.blue})=><div style={{width:size,height:size,borderRadius:"50%",background:bg,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:size*.34,flexShrink:0}}>{t}</div>;
+const Bdg=({label,color,bg})=><span style={{background:bg||C.light,color:color||C.blue,borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:600}}>{label}</span>;
+const Card=({children,style})=><div style={{background:C.white,borderRadius:14,padding:18,boxShadow:"0 2px 14px rgba(13,43,94,0.07)",marginBottom:14,...style}}>{children}</div>;
+const STit=({children,style})=><div style={{fontWeight:700,color:C.navy,fontSize:14,marginBottom:12,...style}}>{children}</div>;
+const Toast=({msg})=>msg?<div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",background:C.green,color:"#fff",padding:"10px 20px",borderRadius:30,fontSize:13,fontWeight:700,zIndex:1200,boxShadow:"0 4px 20px rgba(0,0,0,0.2)",whiteSpace:"nowrap"}}>{msg}</div>:null;
+const BarN=({note})=>{const col=note>=14?C.green:note>=10?C.accent:C.red;return<div style={{flex:1,background:C.border,borderRadius:6,height:7}}><div style={{width:`${(note/20)*100}%`,background:col,height:7,borderRadius:6,transition:"width .4s"}}/></div>;};
+
+function Inp({label,value,onChange,placeholder,type="text",required}){
+  return<div style={{marginBottom:12}}>
+    {label&&<label style={{display:"block",fontSize:11,fontWeight:700,color:C.gray,marginBottom:5,textTransform:"uppercase",letterSpacing:.5}}>{label}{required&&<span style={{color:C.red}}> *</span>}</label>}
+    <input type={type} value={value} onChange={onChange} placeholder={placeholder}
+      style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,color:C.navy,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"#fff"}}/>
+  </div>;
+}
+function Sel({label,value,onChange,children,required}){
+  return<div style={{marginBottom:12}}>
+    {label&&<label style={{display:"block",fontSize:11,fontWeight:700,color:C.gray,marginBottom:5,textTransform:"uppercase",letterSpacing:.5}}>{label}{required&&<span style={{color:C.red}}> *</span>}</label>}
+    <select value={value} onChange={onChange} style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,color:C.navy,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"#fff"}}>{children}</select>
+  </div>;
+}
+function Confirm({label,onOk,onCancel}){
+  return<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.5)",zIndex:1100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+    <div style={{background:C.white,borderRadius:16,padding:24,maxWidth:320,width:"100%",textAlign:"center"}}>
+      <div style={{fontSize:36,marginBottom:10}}>⚠️</div>
+      <div style={{fontWeight:800,color:C.navy,fontSize:16,marginBottom:8}}>Confirmer la suppression</div>
+      <div style={{fontSize:13,color:C.gray,marginBottom:20}}>Supprimer <strong>{label}</strong> ? Action irréversible.</div>
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={onCancel} style={{flex:1,padding:"9px",borderRadius:10,border:`1.5px solid ${C.gray}`,background:"#fff",color:C.gray,cursor:"pointer",fontWeight:700}}>Annuler</button>
+        <button onClick={onOk} style={{flex:1,padding:"9px",borderRadius:10,border:"none",background:C.red,color:"#fff",cursor:"pointer",fontWeight:700}}>Supprimer</button>
+      </div>
+    </div>
+  </div>;
+}
+function Modal({title,onClose,children}){
+  return<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+    <div style={{background:C.white,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:560,maxHeight:"90vh",overflow:"auto",boxShadow:"0 -10px 40px rgba(0,0,0,0.2)",paddingBottom:24}}>
+      <div style={{background:`linear-gradient(135deg,${C.navy},${C.blue})`,borderRadius:"20px 20px 0 0",padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{color:"#fff",fontWeight:800,fontSize:15}}>{title}</div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",width:28,height:28,borderRadius:"50%",cursor:"pointer",fontSize:18}}>×</button>
+      </div>
+      <div style={{padding:"20px 20px 0"}}>{children}</div>
+    </div>
+  </div>;
+}
+
+// ── EXPORT PDF ────────────────────────────────────────────────────
+async function exportPDF(eleve,notes,presences){
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+  const moy=calcMoy(notes),abs=countAbs(presences),W=210,m=18;
+  doc.setFillColor(13,43,94);doc.rect(0,0,W,38,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(20);doc.setFont("helvetica","bold");
+  doc.text("EduTrack",m,16);doc.setFontSize(10);doc.setFont("helvetica","normal");
+  doc.text("Bulletin scolaire officiel — Année 2025-2026",m,24);
+  doc.text(`Édité le : ${new Date().toLocaleDateString("fr-FR")}`,m,31);
+  doc.setTextColor(13,43,94);doc.setFillColor(238,243,251);
+  doc.roundedRect(m,44,W-m*2,28,3,3,"F");
+  doc.setFontSize(14);doc.setFont("helvetica","bold");
+  doc.text(fullName(eleve),m+6,55);
+  doc.setFontSize(10);doc.setFont("helvetica","normal");doc.setTextColor(107,122,141);
+  doc.text(`Classe : ${eleve.classeLabel||"—"}`,m+6,63);
+  doc.text(`Moyenne : ${moy}/20`,m+80,63);
+  doc.text(`Absences : ${abs}`,m+150,63);
+  doc.setTextColor(13,43,94);doc.setFontSize(12);doc.setFont("helvetica","bold");
+  doc.text("Résultats par matière",m,84);
+  const cols=["Matière","Note /20","Coefficient","Appréciation"],cW=[70,30,35,47];
+  let y=90;
+  doc.setFillColor(26,79,160);doc.rect(m,y,W-m*2,9,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont("helvetica","bold");
+  let x=m+2;cols.forEach((c,i)=>{doc.text(c,x,y+6);x+=cW[i];});y+=9;
+  notes.forEach((n,idx)=>{
+    const ev=idx%2===0;doc.setFillColor(ev?244:255,ev?247:255,ev?252:255);doc.rect(m,y,W-m*2,9,"F");
+    doc.setFont("helvetica","normal");doc.setFontSize(9);
+    const ap=n.n>=16?"Très bien":n.n>=14?"Bien":n.n>=12?"Assez bien":n.n>=10?"Passable":"Insuffisant";
+    let rx=m+2;
+    [n.m,`${n.n}/20`,`${n.c}`,ap].forEach((v,i)=>{
+      doc.setTextColor(i===1?(n.n>=10?39:229):(13),i===1?(n.n>=10?174:62):(43),i===1?(n.n>=10?96:62):(94));
+      doc.text(v,rx,y+6);rx+=cW[i];});y+=9;
+  });
+  y+=4;doc.setDrawColor(216,226,240);doc.line(m,y,W-m,y);y+=8;
+  doc.setFillColor(moy>=10?39:229,moy>=10?174:62,moy>=10?96:62);
+  doc.roundedRect(m,y,W-m*2,12,2,2,"F");
+  doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(11);
+  doc.text(`Moyenne générale : ${moy}/20`,m+6,y+8);
+  doc.text(`Mention : ${moy>=16?"Félicitations":moy>=14?"Compliments":moy>=12?"Encouragements":moy>=10?"Passable":"À améliorer"}`,m+110,y+8);y+=20;
+  doc.setTextColor(13,43,94);doc.setFont("helvetica","bold");doc.setFontSize(12);
+  doc.text("Assiduité",m,y);y+=8;
+  presences.slice(0,5).forEach((p,i)=>{
+    const ev=i%2===0;doc.setFillColor(ev?244:255,ev?247:255,ev?252:255);doc.rect(m,y,W-m*2,8,"F");
+    doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(107,122,141);doc.text(p.date,m+2,y+5.5);
+    const sc=p.s==="Présent"?[39,174,96]:p.s==="Retard"?[245,166,35]:[229,62,62];
+    doc.setTextColor(...sc);doc.text(p.s,m+40,y+5.5);
+    if(p.motif){doc.setTextColor(107,122,141);doc.text(p.motif,m+80,y+5.5);}y+=8;
+  });
+  doc.setFillColor(13,43,94);doc.rect(0,280,W,17,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(8);doc.setFont("helvetica","normal");
+  doc.text("EduTrack — Plateforme de gestion scolaire · Document confidentiel",m,290);
+  doc.text("Page 1/1",W-m-10,290);
+  doc.save(`Bulletin_${fullName(eleve).replace(/ /g,"_")}_2025-2026.pdf`);
+}
+
+// ── MODULE EMAILS ─────────────────────────────────────────────────
+function ModuleEmails({db,addEmail}){
+  const [tab,setTab]=useState("rapide");
+  const [apercu,setApercu]=useState(null);
+  const [toast,setToast]=useState("");
+  const [sujet,setSujet]=useState(""),[corps,setCorps]=useState(""),[sel,setSel]=useState([]);
+  const [rEleve,setREleve]=useState(db.eleves[0]?.id||1);
+  const [rType,setRType]=useState("absence");
+  const st=msg=>{setToast(msg);setTimeout(()=>setToast(""),3000);};
+  function envRapide(){
+    const e=db.eleves.find(x=>x.id===rEleve);if(!e)return;
+    const p=db.presences[e.id]?.find(x=>x.s==="Absent")||{date:"23/06/2026",s:"Absent"};
+    const moy=calcMoy(db.notes[e.id]||[]);
+    const email=rType==="absence"
+      ?{icone:"⚠️",couleur:C.red,sujet:`⚠️ Absence signalée — ${fullName(e)}`,destinataire:e.email_parent,corps:`Madame, Monsieur,\n\nVotre enfant ${fullName(e)} a été absent(e) le ${p.date}${p.motif?` (${p.motif})`:""}.\n\nMerci de nous faire parvenir un justificatif dans les 48h.\n\nCordialement,\nL'Administration — EduTrack`,date:nowStr(),statut:"envoyé"}
+      :{icone:"📄",couleur:C.green,sujet:`📄 Bulletin disponible — ${fullName(e)}`,destinataire:e.email_parent,corps:`Madame, Monsieur,\n\nLe bulletin de ${fullName(e)} est disponible.\nMoyenne : ${moy}/20.\n\nConnectez-vous à EduTrack pour le consulter.\n\nCordialement,\nL'Administration`,date:nowStr(),statut:"envoyé"};
+    addEmail(email);st(`✅ Email envoyé à ${e.email_parent}`);
+  }
+  function envLibre(){
+    if(!sujet||!corps||!sel.length)return;
+    sel.forEach(eid=>{const e=db.eleves.find(x=>x.id===eid);addEmail({icone:"✉️",couleur:C.blue,sujet,corps,destinataire:e?.email_parent||"",date:nowStr(),statut:"envoyé"});});
+    st(`✅ ${sel.length} email(s) envoyé(s) !`);setSujet("");setCorps("");setSel([]);
+  }
+  return<div>
+    <Toast msg={toast}/>
+    {apercu&&<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.5)",zIndex:1050,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:C.white,borderRadius:16,width:"100%",maxWidth:480,maxHeight:"85vh",overflow:"auto"}}>
+        <div style={{background:`linear-gradient(135deg,${C.navy},${C.blue})`,borderRadius:"16px 16px 0 0",padding:16,display:"flex",justifyContent:"space-between"}}>
+          <span style={{color:"#fff",fontWeight:800}}>✉️ Aperçu email</span>
+          <button onClick={()=>setApercu(null)} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",width:28,height:28,borderRadius:"50%",cursor:"pointer",fontSize:18}}>×</button>
+        </div>
+        <div style={{padding:16}}>
+          <div style={{background:C.light,borderRadius:10,padding:12,marginBottom:12}}>
+            {[["À",apercu.destinataire||""],["Objet",apercu.sujet||""]].map(([l,v])=><div key={l} style={{display:"flex",gap:8,marginBottom:4}}><span style={{fontSize:12,color:C.gray,width:50}}>{l} :</span><span style={{fontSize:12,color:C.navy,fontWeight:600}}>{v}</span></div>)}
+          </div>
+          <pre style={{fontFamily:"inherit",fontSize:13,color:C.gray,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{apercu.corps}</pre>
+        </div>
+      </div>
+    </div>}
+    <div style={{display:"flex",gap:7,marginBottom:16,flexWrap:"wrap"}}>
+      {[["rapide","⚡ Rapide"],["composer","✉️ Composer"],["historique","📬 Historique"]].map(([k,l])=>(
+        <button key={k} onClick={()=>setTab(k)} style={{padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,background:tab===k?C.navy:C.light,color:tab===k?"#fff":C.navy,fontWeight:600}}>{l}</button>
+      ))}
+    </div>
+    {tab==="rapide"&&<Card>
+      <STit>⚡ Notification rapide</STit>
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        {[["absence","⚠️ Absence"],["bulletin","📄 Bulletin"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setRType(k)} style={{flex:1,padding:"10px 6px",borderRadius:10,border:`2px solid ${rType===k?C.blue:C.border}`,background:rType===k?C.light:"#fff",cursor:"pointer",fontSize:12,fontWeight:700,color:rType===k?C.blue:C.gray,textAlign:"center"}}>{l}</button>
+        ))}
+      </div>
+      <Sel label="Élève" value={rEleve} onChange={e=>setREleve(parseInt(e.target.value))}>
+        {db.eleves.map(e=><option key={e.id} value={e.id}>{fullName(e)}</option>)}
+      </Sel>
+      <div style={{background:C.light,borderRadius:10,padding:12,marginBottom:14}}>
+        <div style={{fontSize:12,color:C.gray,marginBottom:4}}>Destinataire</div>
+        <div style={{fontSize:13,color:C.navy,fontWeight:700}}>{db.eleves.find(e=>e.id===rEleve)?.email_parent}</div>
+      </div>
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={()=>{const e=db.eleves.find(x=>x.id===rEleve);const p=db.presences[e.id]?.find(x=>x.s==="Absent")||{date:"23/06/2026",s:"Absent"};const moy=calcMoy(db.notes[e.id]||[]);setApercu(rType==="absence"?{sujet:`⚠️ Absence — ${fullName(e)}`,destinataire:e.email_parent,corps:`Votre enfant ${fullName(e)} a été absent(e) le ${p.date}.`}:{sujet:`📄 Bulletin — ${fullName(e)}`,destinataire:e.email_parent,corps:`Le bulletin de ${fullName(e)} est disponible. Moyenne : ${moy}/20.`});}}
+          style={{flex:1,padding:"10px",borderRadius:10,border:`1.5px solid ${C.blue}`,background:"#fff",color:C.blue,cursor:"pointer",fontWeight:700,fontSize:13}}>👁️ Aperçu</button>
+        <button onClick={envRapide} style={{flex:2,padding:"10px",borderRadius:10,border:"none",background:`linear-gradient(135deg,${C.navy},${C.blue})`,color:"#fff",cursor:"pointer",fontWeight:700,fontSize:13}}>📤 Envoyer</button>
+      </div>
+    </Card>}
+    {tab==="composer"&&<Card>
+      <STit>✉️ Nouvel email</STit>
+      <div style={{marginBottom:12}}>
+        <label style={{display:"block",fontSize:11,fontWeight:700,color:C.gray,marginBottom:6,textTransform:"uppercase"}}>Destinataires</label>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {db.eleves.map(e=>(
+            <button key={e.id} onClick={()=>setSel(p=>p.includes(e.id)?p.filter(x=>x!==e.id):[...p,e.id])}
+              style={{padding:"5px 12px",borderRadius:20,border:`1.5px solid ${sel.includes(e.id)?C.blue:C.border}`,cursor:"pointer",fontSize:12,background:sel.includes(e.id)?C.light:"#fff",color:sel.includes(e.id)?C.blue:C.gray,fontWeight:sel.includes(e.id)?700:400}}>
+              {sel.includes(e.id)?"✓ ":""}{fullName(e)}
+            </button>
+          ))}
+          <button onClick={()=>setSel(db.eleves.map(e=>e.id))} style={{padding:"5px 12px",borderRadius:20,border:`1.5px solid ${C.border}`,cursor:"pointer",fontSize:12,background:sel.length===db.eleves.length?C.navy:"#fff",color:sel.length===db.eleves.length?"#fff":C.gray}}>Tous</button>
+        </div>
+      </div>
+      <Inp label="Objet" value={sujet} onChange={e=>setSujet(e.target.value)} placeholder="Objet de l'email…"/>
+      <div style={{marginBottom:14}}>
+        <label style={{display:"block",fontSize:11,fontWeight:700,color:C.gray,marginBottom:5,textTransform:"uppercase"}}>Message</label>
+        <textarea value={corps} onChange={e=>setCorps(e.target.value)} rows={5} placeholder="Rédigez votre message…"
+          style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,color:C.navy,outline:"none",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}}/>
+      </div>
+      <button onClick={envLibre} disabled={!sujet||!corps||!sel.length}
+        style={{width:"100%",padding:"11px",borderRadius:10,border:"none",background:!sujet||!corps||!sel.length?C.border:`linear-gradient(135deg,${C.navy},${C.blue})`,color:!sujet||!corps||!sel.length?C.gray:"#fff",cursor:"pointer",fontWeight:700,fontSize:13}}>
+        📤 Envoyer ({sel.length})
+      </button>
+    </Card>}
+    {tab==="historique"&&<Card>
+      <STit>📬 Emails envoyés ({db.emails_envoyes?.length||0})</STit>
+      {!db.emails_envoyes?.length?<div style={{textAlign:"center",padding:"24px 0",color:C.gray}}>Aucun email envoyé.</div>
+        :db.emails_envoyes.map((e,i)=>(
+        <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"12px 0",borderBottom:i<db.emails_envoyes.length-1?`1px solid ${C.border}`:"none"}}>
+          <div style={{width:36,height:36,borderRadius:10,background:(e.couleur||C.blue)+"20",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{e.icone}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,color:C.navy,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.sujet}</div>
+            <div style={{fontSize:11,color:C.gray}}>{e.destinataire} · {e.date}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            <Bdg label="✓ Envoyé" color={C.green} bg="#E8F8EE"/>
+            <button onClick={()=>setApercu(e)} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"3px 8px",cursor:"pointer",fontSize:11,color:C.blue}}>Voir</button>
+          </div>
+        </div>
+      ))}
+    </Card>}
+  </div>;
+}
+
+// ── MODULE VISITES ────────────────────────────────────────────────
+const TYPES_V=["Visite domiciliaire","Visite scolaire","Visite de suivi","Visite d'urgence"];
+const STAT_V=["Planifiée","En cours","Réalisée","Annulée"];
+const MOTIFS_V=["Suivi scolaire","Absentéisme répété","Résultats en baisse","Signalement famille","Protection de l'enfant","Réinsertion scolaire","Soutien parental","Autre"];
+const icV=t=>({"Visite domiciliaire":"🏠","Visite scolaire":"🏫","Visite de suivi":"🔄","Visite d'urgence":"🚨"}[t]||"📋");
+const colV=s=>({"Planifiée":{c:C.accent,bg:"#FEF3E2"},"En cours":{c:C.blue,bg:"#EEF3FB"},"Réalisée":{c:C.green,bg:"#E8F8EE"},"Annulée":{c:C.red,bg:"#FDECEC"}}[s]||{c:C.gray,bg:C.light});
+
+function ModuleVisites({db,addVisite,updVisite}){
+  const visites=db.visites||[];
+  const [tab,setTab]=useState("liste");
+  const [det,setDet]=useState(null);
+  const [fil,setFil]=useState("Tous");
+  const [toast,setToast]=useState("");
+  const [err,setErr]=useState("");
+  const [f,setF]=useState({type:"Visite domiciliaire",eleve:"",classe:"",motif:"Suivi scolaire",date:"",heure:"",responsable:"",observations:"",suivi:"",statut:"Planifiée"});
+  const st=msg=>{setToast(msg);setTimeout(()=>setToast(""),3000);};
+  function add(){
+    if(!f.eleve||!f.date||!f.responsable){setErr("Champs obligatoires manquants.");return;}
+    addVisite(f);setErr("");setTab("liste");st("✅ Visite enregistrée !");
+    setF({type:"Visite domiciliaire",eleve:"",classe:"",motif:"Suivi scolaire",date:"",heure:"",responsable:"",observations:"",suivi:"",statut:"Planifiée"});
+  }
+  const vFil=fil==="Tous"?visites:visites.filter(v=>v.statut===fil);
+  if(det){const v=visites.find(x=>x.id===det.id)||det;return<div>
+    <button onClick={()=>setDet(null)} style={{background:C.light,border:"none",color:C.navy,padding:"7px 14px",borderRadius:20,cursor:"pointer",fontWeight:700,fontSize:12,marginBottom:14}}>← Retour</button>
+    <Toast msg={toast}/>
+    <Card style={{borderLeft:`4px solid ${colV(v.statut).c}`}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:14}}>
+        <div><div style={{fontSize:28,marginBottom:4}}>{icV(v.type)}</div><div style={{fontWeight:800,color:C.navy,fontSize:16}}>{v.type}</div><div style={{fontSize:13,color:C.gray}}>{v.date}{v.heure?` à ${v.heure}`:""}</div></div>
+        <Bdg label={v.statut} color={colV(v.statut).c} bg={colV(v.statut).bg}/>
+      </div>
+      {[["👤 Élève",v.eleve],["🏫 Classe",v.classe||"—"],["📋 Motif",v.motif],["👩‍🏫 Responsable",v.responsable]].map(([l,val])=>(
+        <div key={l} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{fontSize:12,color:C.gray,width:140,fontWeight:600}}>{l}</div>
+          <div style={{fontSize:13,color:C.navy,fontWeight:600}}>{val}</div>
+        </div>
+      ))}
+      {v.observations&&<div style={{marginTop:14}}><div style={{fontSize:12,color:C.gray,fontWeight:700,marginBottom:6}}>📝 OBSERVATIONS</div><div style={{background:C.light,borderRadius:10,padding:12,fontSize:13,color:C.navy,lineHeight:1.6}}>{v.observations}</div></div>}
+      {v.suivi&&<div style={{marginTop:12}}><div style={{fontSize:12,color:C.gray,fontWeight:700,marginBottom:6}}>🔄 SUIVI</div><div style={{background:"#E8F8EE",borderRadius:10,padding:12,fontSize:13,color:C.navy,lineHeight:1.6}}>{v.suivi}</div></div>}
+      <div style={{marginTop:16}}>
+        <div style={{fontSize:12,color:C.gray,fontWeight:700,marginBottom:8}}>CHANGER LE STATUT</div>
+        <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+          {STAT_V.map(s=><button key={s} onClick={()=>{updVisite(v.id,{statut:s});st("Statut mis à jour !");}} style={{padding:"6px 14px",borderRadius:20,border:`1.5px solid ${colV(s).c}`,background:v.statut===s?colV(s).c:"#fff",color:v.statut===s?"#fff":colV(s).c,cursor:"pointer",fontWeight:700,fontSize:12}}>{s}</button>)}
+        </div>
+      </div>
+    </Card>
+  </div>;}
+  return<div>
+    <Toast msg={toast}/>
+    <div style={{display:"flex",gap:7,marginBottom:16,flexWrap:"wrap"}}>
+      {[["liste","📋 Visites"],["planifier","➕ Planifier"]].map(([k,l])=>(
+        <button key={k} onClick={()=>setTab(k)} style={{padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,background:tab===k?C.navy:C.light,color:tab===k?"#fff":C.navy,fontWeight:600}}>{l}</button>
+      ))}
+    </div>
+    {tab==="liste"&&<>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
+        {[["📋",visites.length,"Total",C.blue],["🗓️",visites.filter(v=>v.statut==="Planifiée").length,"Planifiées",C.accent],["✅",visites.filter(v=>v.statut==="Réalisée").length,"Réalisées",C.green],["🚨",visites.filter(v=>v.type==="Visite d'urgence").length,"Urgences",C.red]].map(([ic,v,l,col])=>(
+          <div key={l} style={{background:C.white,borderRadius:12,padding:"12px 10px",flex:1,minWidth:80,boxShadow:"0 2px 8px rgba(13,43,94,0.07)",borderTop:`3px solid ${col}`,textAlign:"center"}}>
+            <div style={{fontSize:18}}>{ic}</div><div style={{fontWeight:800,fontSize:20,color:col}}>{v}</div><div style={{fontSize:11,color:C.gray}}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+        {["Tous",...STAT_V].map(f=><button key={f} onClick={()=>setFil(f)} style={{padding:"5px 12px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,background:fil===f?C.navy:C.light,color:fil===f?"#fff":C.navy,fontWeight:600}}>{f}</button>)}
+      </div>
+      <Card>
+        {vFil.length===0?<div style={{textAlign:"center",padding:"24px 0",color:C.gray}}>Aucune visite.</div>
+          :vFil.map((v,i)=>(
+          <div key={v.id} onClick={()=>setDet(v)} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"12px 0",cursor:"pointer",borderBottom:i<vFil.length-1?`1px solid ${C.border}`:"none"}}>
+            <div style={{width:36,height:36,borderRadius:10,background:v.type==="Visite d'urgence"?"#FDECEC":C.light,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{icV(v.type)}</div>
+            <div style={{flex:1}}><div style={{fontWeight:700,color:C.navy,fontSize:13}}>{v.eleve}</div><div style={{fontSize:12,color:C.gray}}>{v.type} · {v.date}</div><div style={{fontSize:12,color:C.gray}}>{v.motif}</div></div>
+            <Bdg label={v.statut} color={colV(v.statut).c} bg={colV(v.statut).bg}/>
+          </div>
+        ))}
+      </Card>
+    </>}
+    {tab==="planifier"&&<Card>
+      <STit>📋 Planifier une visite</STit>
+      <Sel label="Type" value={f.type} onChange={e=>setF({...f,type:e.target.value})} required>{TYPES_V.map(t=><option key={t}>{t}</option>)}</Sel>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Inp label="Élève" value={f.eleve} onChange={e=>setF({...f,eleve:e.target.value})} placeholder="Nom de l'élève" required/>
+        <Inp label="Classe" value={f.classe} onChange={e=>setF({...f,classe:e.target.value})} placeholder="Ex: 6ème A"/>
+      </div>
+      <Sel label="Motif" value={f.motif} onChange={e=>setF({...f,motif:e.target.value})}>{MOTIFS_V.map(m=><option key={m}>{m}</option>)}</Sel>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Inp label="Date" value={f.date} onChange={e=>setF({...f,date:e.target.value})} type="date" required/>
+        <Inp label="Heure" value={f.heure} onChange={e=>setF({...f,heure:e.target.value})} type="time"/>
+      </div>
+      <Inp label="Responsable" value={f.responsable} onChange={e=>setF({...f,responsable:e.target.value})} placeholder="Nom du responsable" required/>
+      <div style={{marginBottom:12}}>
+        <label style={{display:"block",fontSize:11,fontWeight:700,color:C.gray,marginBottom:5,textTransform:"uppercase"}}>Observations</label>
+        <textarea value={f.observations} onChange={e=>setF({...f,observations:e.target.value})} rows={3} placeholder="Observations préliminaires…"
+          style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,color:C.navy,outline:"none",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}}/>
+      </div>
+      {err&&<div style={{background:"#FEF2F2",border:`1px solid #FECACA`,borderRadius:8,padding:"9px 12px",marginBottom:12,color:C.red,fontSize:13}}>⚠️ {err}</div>}
+      <button onClick={add} style={{width:"100%",padding:12,borderRadius:10,border:"none",background:`linear-gradient(135deg,${C.navy},${C.blue})`,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>✅ Enregistrer</button>
+    </Card>}
+  </div>;
+}
+
+// ── MODULE PROTECTION ─────────────────────────────────────────────
+const TYPES_SIG=["Violence sexuelle","Violence physique","Violence émotionnelle / psychologique","Grossesse précoce","Harcèlement scolaire","Négligence parentale","Autre"];
+const GRAVITES=["Faible","Modéré","Grave","Très grave / Urgence"];
+const STAT_SIG=["Signalé","En investigation","Pris en charge","Résolu","Transmis aux autorités"];
+const colG=g=>({"Faible":{c:C.green,bg:"#E8F8EE"},"Modéré":{c:C.accent,bg:"#FEF3E2"},"Grave":{c:C.orange,bg:"#FDF0E8"},"Très grave / Urgence":{c:C.red,bg:"#FDECEC"}}[g]||{c:C.gray,bg:C.light});
+const colS=s=>({"Signalé":{c:C.red,bg:"#FDECEC"},"En investigation":{c:C.accent,bg:"#FEF3E2"},"Pris en charge":{c:C.blue,bg:"#EEF3FB"},"Résolu":{c:C.green,bg:"#E8F8EE"},"Transmis aux autorités":{c:C.purple,bg:"#F3E8FF"}}[s]||{c:C.gray,bg:C.light});
+
+const FICHES=[
+  {type:"Violence sexuelle",icone:"🔴",color:C.red,signes:["Comportement régressif soudain","Peur d'un adulte spécifique","Blessures inexpliquées","Retrait et isolement","Dessins ou discours sexualisés"],comment:"Écouter sans juger. Ne pas interroger l'enfant de façon répétée. Signaler immédiatement à la direction et aux autorités.",prevention:"Parler à l'enfant de son corps. Lui expliquer qu'il a le droit de dire non. Créer un climat de confiance."},
+  {type:"Violence physique",icone:"🟠",color:C.orange,signes:["Marques, bleus, brûlures inexpliquées","Peur des adultes","Retrait ou agressivité","Vêtements couvrant le corps en toute saison","Faible estime de soi"],comment:"Documenter discrètement. Ne pas confronter l'auteur présumé. Protéger l'enfant en priorité.",prevention:"Former les enseignants au repérage. Créer un climat de confiance. Organiser des ateliers sur la discipline positive."},
+  {type:"Violence émotionnelle",icone:"🟡",color:C.accent,signes:["Anxiété, pleurs fréquents","Faible confiance en soi","Propos dévalorisants","Troubles du sommeil","Isolement des pairs"],comment:"Valoriser l'enfant régulièrement. Créer des moments d'expression. Impliquer un psychologue si disponible.",prevention:"Promouvoir la bienveillance en famille et à l'école. Former les parents à la communication positive."},
+  {type:"Grossesse précoce",icone:"🟣",color:C.purple,signes:["Absences répétées","Fatigue inhabituelle","Changement de morphologie","Retrait des activités scolaires","Isolement"],comment:"Aborder avec tact et confidentialité. Impliquer une femme de confiance. Ne jamais stigmatiser.",prevention:"Éducation à la vie familiale. Sensibilisation à la santé reproductive. Impliquer les parents et leaders communautaires."},
+];
+
+const RESSOURCES=[
+  {titre:"Cellule d'écoute scolaire",desc:"Dans l'établissement — contacter la direction",tel:"Interne",icone:"🏫"},
+  {titre:"Numéro vert enfance en danger",desc:"Service national gratuit, disponible 24h/24",tel:"116",icone:"📞"},
+  {titre:"Assistante sociale",desc:"Sur rendez-vous auprès de la direction",tel:"Via direction",icone:"👩‍⚕️"},
+  {titre:"Police / Gendarmerie",desc:"En cas de danger immédiat",tel:"17 / 112",icone:"🚔"},
+];
+
+function ModuleProtection({db,addSignal,updSignal}){
+  const signalements=db.signalements||[];
+  const [tab,setTab]=useState("tableau");
+  const [det,setDet]=useState(null);
+  const [fiche,setFiche]=useState(null);
+  const [fil,setFil]=useState("Tous");
+  const [toast,setToast]=useState("");
+  const [err,setErr]=useState("");
+  const [f,setF]=useState({type:"Violence physique",eleve:"",classe:"",gravite:"Modéré",date:"",signale_par:"",description:"",mesures:"",confidentiel:true,statut:"Signalé"});
+  const st=msg=>{setToast(msg);setTimeout(()=>setToast(""),3000);};
+  function sign(){
+    if(!f.eleve||!f.date||!f.signale_par||!f.description){setErr("Veuillez remplir tous les champs obligatoires.");return;}
+    addSignal(f);setErr("");setTab("tableau");st("✅ Signalement enregistré confidentiellement.");
+    setF({type:"Violence physique",eleve:"",classe:"",gravite:"Modéré",date:"",signale_par:"",description:"",mesures:"",confidentiel:true,statut:"Signalé"});
+  }
+  const sFil=fil==="Tous"?signalements:signalements.filter(s=>s.statut===fil);
+
+  if(fiche)return<div>
+    <button onClick={()=>setFiche(null)} style={{background:C.light,border:"none",color:C.navy,padding:"7px 14px",borderRadius:20,cursor:"pointer",fontWeight:700,fontSize:12,marginBottom:14}}>← Retour</button>
+    <Card style={{borderLeft:`4px solid ${fiche.color}`}}>
+      <div style={{fontSize:32,marginBottom:8}}>{fiche.icone}</div>
+      <div style={{fontWeight:800,color:C.navy,fontSize:17,marginBottom:4}}>{fiche.type}</div>
+      <div style={{background:C.light,borderRadius:10,padding:14,marginBottom:12}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.gray,marginBottom:8,textTransform:"uppercase"}}>⚠️ Signes à détecter</div>
+        {fiche.signes.map((s,i)=><div key={i} style={{display:"flex",gap:8,padding:"5px 0",borderBottom:i<fiche.signes.length-1?`1px dashed ${C.border}`:"none"}}><span style={{color:fiche.color}}>•</span><span style={{fontSize:13,color:C.navy}}>{s}</span></div>)}
+      </div>
+      <div style={{background:"#FEF3E2",borderRadius:10,padding:14,marginBottom:12}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.orange,marginBottom:8,textTransform:"uppercase"}}>📋 Que faire ?</div>
+        <div style={{fontSize:13,color:C.navy,lineHeight:1.7}}>{fiche.comment}</div>
+      </div>
+      <div style={{background:"#E8F8EE",borderRadius:10,padding:14}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.green,marginBottom:8,textTransform:"uppercase"}}>🛡️ Prévention</div>
+        <div style={{fontSize:13,color:C.navy,lineHeight:1.7}}>{fiche.prevention}</div>
+      </div>
+    </Card>
+  </div>;
+
+  if(det){const s=signalements.find(x=>x.id===det.id)||det;return<div>
+    <Toast msg={toast}/>
+    <button onClick={()=>setDet(null)} style={{background:C.light,border:"none",color:C.navy,padding:"7px 14px",borderRadius:20,cursor:"pointer",fontWeight:700,fontSize:12,marginBottom:14}}>← Retour</button>
+    <div style={{background:"#FDECEC",border:`1px solid #FECACA`,borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:C.red,fontWeight:700}}>🔒 Document confidentiel — accès réservé aux personnes habilitées</div>
+    <Card style={{borderLeft:`4px solid ${colG(s.gravite).c}`}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:14}}>
+        <div><div style={{fontWeight:800,color:C.navy,fontSize:16}}>{s.type}</div><div style={{fontSize:12,color:C.gray,marginTop:2}}>Signalé le {s.date} par {s.signale_par}</div></div>
+        <div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end"}}><Bdg label={s.gravite} color={colG(s.gravite).c} bg={colG(s.gravite).bg}/><Bdg label={s.statut} color={colS(s.statut).c} bg={colS(s.statut).bg}/></div>
+      </div>
+      {[["👤 Élève",s.eleve],["🏫 Classe",s.classe||"—"]].map(([l,v])=><div key={l} style={{display:"flex",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}><div style={{fontSize:12,color:C.gray,width:130,fontWeight:600}}>{l}</div><div style={{fontSize:13,color:C.navy,fontWeight:600}}>{v}</div></div>)}
+      {s.description&&<div style={{marginTop:14}}><div style={{fontSize:12,color:C.gray,fontWeight:700,marginBottom:6}}>📝 DESCRIPTION</div><div style={{background:C.light,borderRadius:10,padding:12,fontSize:13,color:C.navy,lineHeight:1.7}}>{s.description}</div></div>}
+      {s.mesures&&<div style={{marginTop:12}}><div style={{fontSize:12,color:C.gray,fontWeight:700,marginBottom:6}}>🛡️ MESURES PRISES</div><div style={{background:"#E8F8EE",borderRadius:10,padding:12,fontSize:13,color:C.navy,lineHeight:1.7}}>{s.mesures}</div></div>}
+      <div style={{marginTop:16}}>
+        <div style={{fontSize:12,color:C.gray,fontWeight:700,marginBottom:8}}>METTRE À JOUR LE STATUT</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {STAT_SIG.map(st2=><button key={st2} onClick={()=>{updSignal(s.id,{statut:st2});st("Statut mis à jour.");}} style={{padding:"6px 12px",borderRadius:20,border:`1.5px solid ${colS(st2).c}`,background:s.statut===st2?colS(st2).c:"#fff",color:s.statut===st2?"#fff":colS(st2).c,cursor:"pointer",fontWeight:600,fontSize:11}}>{st2}</button>)}
+        </div>
+      </div>
+    </Card>
+  </div>;}
+
+  return<div>
+    <Toast msg={toast}/>
+    <div style={{background:"#FDECEC",border:`1px solid #FECACA`,borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:C.red}}>
+      <strong>🚨 Urgence :</strong> En cas de danger immédiat, appelez le <strong>17</strong> ou le <strong>112</strong>.
+    </div>
+    <div style={{display:"flex",gap:7,marginBottom:16,flexWrap:"wrap"}}>
+      {[["tableau","📋 Signalements"],["signaler","🚨 Signaler"],["fiches","📖 Fiches"],["ressources","📞 Ressources"]].map(([k,l])=>(
+        <button key={k} onClick={()=>setTab(k)} style={{padding:"7px 12px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,background:tab===k?C.navy:C.light,color:tab===k?"#fff":C.navy,fontWeight:600}}>{l}</button>
+      ))}
+    </div>
+    {tab==="tableau"&&<>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
+        {[["🚨",signalements.filter(s=>s.statut==="Signalé").length,"Nouveaux",C.red],["🔍",signalements.filter(s=>s.statut==="En investigation").length,"En cours",C.accent],["🛡️",signalements.filter(s=>s.statut==="Pris en charge").length,"Pris en charge",C.blue],["✅",signalements.filter(s=>s.statut==="Résolu").length,"Résolus",C.green]].map(([ic,v,l,col])=>(
+          <div key={l} style={{background:C.white,borderRadius:12,padding:"12px 10px",flex:1,minWidth:80,boxShadow:"0 2px 8px rgba(13,43,94,0.07)",borderTop:`3px solid ${col}`,textAlign:"center"}}>
+            <div style={{fontSize:18}}>{ic}</div><div style={{fontWeight:800,fontSize:20,color:col}}>{v}</div><div style={{fontSize:11,color:C.gray}}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+        {["Tous",...STAT_SIG.slice(0,4)].map(f2=><button key={f2} onClick={()=>setFil(f2)} style={{padding:"5px 11px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,background:fil===f2?C.navy:C.light,color:fil===f2?"#fff":C.navy,fontWeight:600}}>{f2}</button>)}
+      </div>
+      <Card>
+        {sFil.length===0?<div style={{textAlign:"center",padding:"24px 0",color:C.gray}}>Aucun signalement.</div>
+          :sFil.map((s,i)=>(
+          <div key={s.id} onClick={()=>setDet(s)} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"12px 0",cursor:"pointer",borderBottom:i<sFil.length-1?`1px solid ${C.border}`:"none"}}>
+            <div style={{width:36,height:36,borderRadius:10,background:colG(s.gravite).bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>
+              {s.gravite==="Très grave / Urgence"?"🚨":s.gravite==="Grave"?"⚠️":s.gravite==="Modéré"?"🟡":"🟢"}
+            </div>
+            <div style={{flex:1}}><div style={{fontWeight:700,color:C.navy,fontSize:13}}>{s.confidentiel?"🔒 ":""}{s.type}</div><div style={{fontSize:11,color:C.gray}}>{s.eleve} · {s.classe||"—"} · {s.date}</div></div>
+            <Bdg label={s.statut} color={colS(s.statut).c} bg={colS(s.statut).bg}/>
+          </div>
+        ))}
+      </Card>
+    </>}
+    {tab==="signaler"&&<Card>
+      <div style={{background:"#FDECEC",border:`1px solid #FECACA`,borderRadius:8,padding:"10px 12px",marginBottom:16,fontSize:12,color:C.red,lineHeight:1.6}}>🔒 <strong>Confidentialité garantie.</strong></div>
+      <STit>🚨 Nouveau signalement</STit>
+      <Sel label="Type de situation" value={f.type} onChange={e=>setF({...f,type:e.target.value})} required>{TYPES_SIG.map(t=><option key={t}>{t}</option>)}</Sel>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Inp label="Nom de l'élève" value={f.eleve} onChange={e=>setF({...f,eleve:e.target.value})} placeholder="Ou 'Anonyme'" required/>
+        <Inp label="Classe" value={f.classe} onChange={e=>setF({...f,classe:e.target.value})} placeholder="Ex: 4ème A"/>
+      </div>
+      <Sel label="Niveau de gravité" value={f.gravite} onChange={e=>setF({...f,gravite:e.target.value})}>{GRAVITES.map(g=><option key={g}>{g}</option>)}</Sel>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Inp label="Date" value={f.date} onChange={e=>setF({...f,date:e.target.value})} type="date" required/>
+        <Inp label="Signalé par" value={f.signale_par} onChange={e=>setF({...f,signale_par:e.target.value})} placeholder="Enseignant, Parent…" required/>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{display:"block",fontSize:11,fontWeight:700,color:C.gray,marginBottom:5,textTransform:"uppercase"}}>Description <span style={{color:C.red}}>*</span></label>
+        <textarea value={f.description} onChange={e=>setF({...f,description:e.target.value})} rows={4} placeholder="Décrivez les faits observés de façon factuelle…"
+          style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,color:C.navy,outline:"none",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit",lineHeight:1.6}}/>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{display:"block",fontSize:11,fontWeight:700,color:C.gray,marginBottom:5,textTransform:"uppercase"}}>Mesures immédiates</label>
+        <textarea value={f.mesures} onChange={e=>setF({...f,mesures:e.target.value})} rows={2} placeholder="Actions déjà entreprises…"
+          style={{width:"100%",padding:"10px 12px",borderRadius:10,border:`1.5px solid ${C.border}`,fontSize:13,color:C.navy,outline:"none",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}}/>
+      </div>
+      {err&&<div style={{background:"#FEF2F2",border:`1px solid #FECACA`,borderRadius:8,padding:"9px 12px",marginBottom:12,color:C.red,fontSize:13}}>⚠️ {err}</div>}
+      <button onClick={sign} style={{width:"100%",padding:12,borderRadius:10,border:"none",background:`linear-gradient(135deg,${C.red},#C0392B)`,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>🚨 Enregistrer le signalement</button>
+    </Card>}
+    {tab==="fiches"&&<div>
+      <div style={{fontSize:13,color:C.gray,marginBottom:14,lineHeight:1.6}}>Ces fiches aident à reconnaître les signes de violence et à agir de façon appropriée.</div>
+      {FICHES.map(fi=>(
+        <div key={fi.type} onClick={()=>setFiche(fi)} style={{background:C.white,borderRadius:12,padding:16,marginBottom:10,cursor:"pointer",boxShadow:"0 2px 10px rgba(13,43,94,0.07)",borderLeft:`4px solid ${fi.color}`,display:"flex",alignItems:"center",gap:14}}>
+          <div style={{fontSize:32}}>{fi.icone}</div>
+          <div style={{flex:1}}><div style={{fontWeight:700,color:C.navy,fontSize:14}}>{fi.type}</div><div style={{fontSize:12,color:C.gray,marginTop:3}}>{fi.signes.length} signes · Conduite à tenir · Prévention</div></div>
+          <div style={{color:C.gray,fontSize:18}}>›</div>
+        </div>
+      ))}
+    </div>}
+    {tab==="ressources"&&<div>
+      {RESSOURCES.map((r,i)=>(
+        <Card key={i} style={{display:"flex",gap:14,alignItems:"center"}}>
+          <div style={{fontSize:32,flexShrink:0}}>{r.icone}</div>
+          <div style={{flex:1}}><div style={{fontWeight:700,color:C.navy,fontSize:14}}>{r.titre}</div><div style={{fontSize:12,color:C.gray,marginTop:3}}>{r.desc}</div></div>
+          <div style={{background:C.navy,color:"#fff",borderRadius:20,padding:"5px 14px",fontWeight:800,fontSize:14,flexShrink:0}}>{r.tel}</div>
+        </Card>
+      ))}
+    </div>}
+  </div>;
+}
+
+// ── MODULE SENSIBILISATION ────────────────────────────────────────
+const CATS=[
+  {id:"parents",       label:"Rôle des parents",           icone:"👨‍👩‍👧",color:C.purple},
+  {id:"reussite",      label:"Réussite scolaire",          icone:"🎓",   color:C.blue},
+  {id:"entrepreneuriat",label:"Entrepreneuriat",           icone:"💼",   color:C.orange},
+  {id:"orientation",   label:"Orientation professionnelle",icone:"🧭",   color:C.teal},
+  {id:"biblique",      label:"Conseils bibliques",         icone:"✝️",   color:C.green},
+];
+const ARTS={
+  parents:[
+    {titre:"Votre présence, leur avenir",duree:"3 min",tags:["présence","soutien"],contenu:`Chers parents,\n\nVotre implication dans la vie scolaire de votre enfant est l'un des facteurs les plus puissants de sa réussite.\n\n🏠 À la maison :\n• Réservez 30 minutes chaque soir pour les devoirs dans un endroit calme\n• Demandez "qu'as-tu appris aujourd'hui ?" plutôt que "as-tu eu de bonnes notes ?"\n• Lisez ensemble 15 minutes par jour\n• Célébrez chaque progrès, même petit\n\n🏫 À l'école :\n• Assistez aux réunions parents-enseignants\n• Consultez régulièrement le bulletin sur EduTrack\n• Contactez les professeurs dès les premiers signes de difficulté\n\nUn enfant qui sait que ses parents croient en lui peut déplacer des montagnes.`},
+    {titre:"Discipline positive : élever sans blesser",duree:"4 min",tags:["discipline","bienveillance"],contenu:`La discipline positive, c'est encadrer son enfant avec fermeté et bienveillance.\n\n❌ Ce qui ne fonctionne pas :\n• Les punitions humiliantes\n• Les comparaisons avec d'autres enfants\n• Les cris et la violence physique\n\n✅ Ce qui fonctionne :\n• Des règles claires et comprises\n• Des conséquences logiques et proportionnées\n• Le dialogue et la reconnaissance\n\n💡 Distinguez l'acte de la personne. Dites "ce comportement n'est pas acceptable", pas "tu es nul".`},
+    {titre:"L'écran, l'ami ou l'ennemi ?",duree:"2 min",tags:["numérique","écran"],contenu:`📱 Recommandations par âge :\n• Moins de 6 ans : maximum 1h/jour avec un adulte\n• 6-12 ans : 1h30/jour max, jamais avant les devoirs\n• 12-18 ans : 2h/jour, espaces "sans écran" (repas, chambre)\n\n🌙 La règle d'or : pas d'écran dans la chambre après 21h. Le sommeil est essentiel pour la mémoire et la concentration.\n\n🤝 Regardez parfois avec eux — c'est l'occasion d'ouvrir le dialogue sur des valeurs importantes.`},
+  ],
+  reussite:[
+    {titre:"Les 5 habitudes des élèves qui réussissent",duree:"4 min",tags:["méthode","organisation"],contenu:`1️⃣ Réviser régulièrement, pas en urgence\nRéviser 20 min/soir pendant une semaine est 3x plus efficace qu'une nuit blanche.\n\n2️⃣ Poser des questions\nNe jamais rester bloqué seul. L'humilité d'apprendre est une force.\n\n3️⃣ Organiser son temps\nUn emploi du temps personnel évite le stress.\n\n4️⃣ Prendre soin de soi\nDormir 8-9h, manger correctement, faire du sport.\n\n5️⃣ Avoir un "pourquoi"\nLes élèves qui savent pourquoi ils étudient résistent mieux aux difficultés.`},
+    {titre:"Gérer le stress des examens",duree:"3 min",tags:["examens","stress"],contenu:`🧘 Techniques efficaces :\n• La respiration carrée : inspirez 4s, bloquez 4s, expirez 4s, bloquez 4s. Répétez 4 fois.\n• La visualisation positive : imaginez-vous répondant correctement aux questions.\n• Dormez bien la veille — c'est pendant le sommeil que le cerveau consolide les apprentissages.\n\n💬 Aux parents : évitez "si tu rates, tu vas…". Dites plutôt : "on est fiers de toi quoi qu'il arrive".`},
+  ],
+  entrepreneuriat:[
+    {titre:"L'esprit entrepreneur dès l'école",duree:"5 min",tags:["initiative","Afrique"],contenu:`💡 L'esprit entrepreneur, c'est :\n• Identifier un problème et imaginer une solution\n• Prendre des initiatives sans attendre\n• Apprendre de ses échecs\n• Créer de la valeur pour les autres\n\n🌍 Modèles africains inspirants :\n• Aliko Dangote — a commencé à vendre du sucre à l'école\n• Strive Masiyiwa — PDG de Econet, parti de rien\n\n📝 Pour les élèves : commencez petit. Résolvez un problème de votre quartier. Apprenez à épargner.`},
+    {titre:"Épargner et gérer son argent",duree:"3 min",tags:["finance","épargne"],contenu:`💰 3 principes fondamentaux :\n\n1. Gagner : comprenez d'où vient l'argent — travail, service, produit vendu.\n\n2. Épargner : la règle des 10% — mettez 10% de côté dès que vous recevez de l'argent. Cette habitude crée une liberté financière à l'âge adulte.\n\n3. Donner : apprendre à partager développe la générosité.\n\n🏦 Ouvrez un compte épargne pour votre enfant. Montrez-lui les relevés. L'argent ne doit pas être tabou.`},
+  ],
+  orientation:[
+    {titre:"Choisir son orientation : ne pas se tromper de vie",duree:"5 min",tags:["carrière","avenir"],contenu:`🔍 3 questions essentielles :\n\n1. Qu'est-ce que j'aime faire naturellement ?\nLes activités qui vous absorbent au point d'en oublier le temps sont des indices précieux.\n\n2. Qu'est-ce que je fais mieux que la majorité ?\nDemandez à vos proches ce qu'ils apprécient chez vous.\n\n3. Quel problème m'indigne ou m'inspire ?\nLes meilleures carrières naissent à l'intersection de ce qu'on aime, ce qu'on sait faire et ce dont le monde a besoin.\n\n🎯 Filières porteurs en Afrique de l'Ouest :\n• Numérique & développement logiciel\n• Agronomie & agro-alimentaire\n• Santé (médecine, pharmacie, sage-femme)\n• Droit & justice\n• Énergie renouvelable\n• Finance & comptabilité`},
+    {titre:"Le CV et la lettre de motivation",duree:"3 min",tags:["emploi","CV"],contenu:`📄 Un bon CV, c'est :\n• Maximum 1 page pour les moins de 25 ans\n• Clair, sans fautes d'orthographe\n• Honnête — n'inventez jamais des expériences\n• Adapté au poste visé\n\n✍️ Une bonne lettre de motivation :\n• 3 paragraphes : qui je suis / pourquoi ce poste / ce que j'apporte\n• Personnalisée : montrez que vous connaissez l'organisation\n• Confiante mais pas arrogante\n\n💡 Faites des stages dès la 3ème. En Afrique, les relations professionnelles sont aussi importantes que le diplôme.`},
+  ],
+  biblique:[
+    {titre:"La sagesse et la connaissance : un héritage biblique",duree:"4 min",tags:["Bible","sagesse","foi"],contenu:`📖 "Acquiers la sagesse, acquiers l'intelligence…" — Proverbes 4:5\n\nSur le travail scolaire :\n"Celui qui travaille sa terre sera rassasié de pain…" — Proverbes 12:11\n→ L'effort constant est valorisé. La paresse est une forme d'irrespect de ses propres dons.\n\nSur les difficultés :\n"Car je connais les projets que j'ai formés sur vous… projets de paix et non de malheur." — Jérémie 29:11\n→ Même quand les résultats déçoivent, ne perdez pas espoir.\n\nSur la sagesse :\n"Si quelqu'un manque de sagesse, qu'il la demande à Dieu…" — Jacques 1:5\n\n🙏 Pour les parents :\n"Instruis l'enfant selon la voie qu'il doit suivre; et quand il sera vieux, il ne s'en détournera pas." — Proverbes 22:6`},
+    {titre:"Le respect : fondement de toute réussite",duree:"3 min",tags:["respect","valeurs"],contenu:`📖 "Honore ton père et ta mère…" — Exode 20:12\n\n🤝 Le respect à l'école :\n• Écouter attentivement ses enseignants\n• Respecter ses camarades dans leur différence\n• Respecter les règles de l'établissement\n\n💪 Le respect de soi :\n• Ne pas se laisser entraîner contre ses valeurs\n• Protéger son corps, son esprit et son avenir\n• Refuser la pression des pairs\n\n🌟 Vous êtes fait à l'image de Dieu (Genèse 1:27). Vous avez une dignité inaliénable. Aucune note, aucun échec ne peut vous enlever cela.`},
+    {titre:"Persévérance : la clé que tout étudiant doit avoir",duree:"3 min",tags:["persévérance","foi"],contenu:`📖 "Ne nous lassons pas de faire le bien; car nous moissonnerons au temps convenable…" — Galates 6:9\n\n🌱 Un mauvais trimestre n'est pas une fin — c'est un signal.\n\nLes grands ont tous connu l'échec :\n• Thomas Edison : 10 000 tentatives avant l'ampoule\n• Nelson Mandela : 27 ans en prison avant de diriger son pays\n• Abraham : 25 ans d'attente avant de voir la promesse accomplie\n\n🙏 Prière pour l'étudiant :\n"Seigneur, donne-moi la persévérance dans mes études, la sagesse dans mes choix, et la foi que Tu as un plan pour ma vie. Amen."`},
+  ],
+};
+
+function ModuleSensibilisation(){
+  const [cat,setCat]=useState(null);
+  const [art,setArt]=useState(null);
+  if(art)return<div>
+    <button onClick={()=>setArt(null)} style={{background:C.light,border:"none",color:C.navy,padding:"7px 14px",borderRadius:20,cursor:"pointer",fontWeight:700,fontSize:12,marginBottom:14}}>← Retour</button>
+    <Card>
+      <div style={{fontSize:11,color:C.gray,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>{art.duree} de lecture</div>
+      <div style={{fontWeight:800,color:C.navy,fontSize:18,marginBottom:16,lineHeight:1.4}}>{art.titre}</div>
+      <pre style={{fontFamily:"inherit",fontSize:13,color:"#374151",lineHeight:1.85,whiteSpace:"pre-wrap",margin:0}}>{art.contenu}</pre>
+      <div style={{marginTop:20,display:"flex",gap:6,flexWrap:"wrap"}}>
+        {art.tags.map(t=><span key={t} style={{background:C.light,color:C.blue,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600}}>#{t}</span>)}
+      </div>
+    </Card>
+  </div>;
+  if(cat){
+    const c=CATS.find(x=>x.id===cat);const arts=ARTS[cat]||[];
+    return<div>
+      <button onClick={()=>setCat(null)} style={{background:C.light,border:"none",color:C.navy,padding:"7px 14px",borderRadius:20,cursor:"pointer",fontWeight:700,fontSize:12,marginBottom:14}}>← Retour</button>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20,background:C.white,borderRadius:14,padding:16,boxShadow:"0 2px 14px rgba(13,43,94,0.07)",borderLeft:`4px solid ${c.color}`}}>
+        <div style={{fontSize:34}}>{c.icone}</div>
+        <div><div style={{fontWeight:800,color:C.navy,fontSize:16}}>{c.label}</div><div style={{fontSize:12,color:C.gray,marginTop:2}}>{arts.length} article{arts.length>1?"s":""}</div></div>
+      </div>
+      {arts.map((a,i)=>(
+        <div key={i} onClick={()=>setArt(a)} style={{background:C.white,borderRadius:12,padding:16,marginBottom:10,cursor:"pointer",boxShadow:"0 2px 10px rgba(13,43,94,0.06)",borderLeft:`3px solid ${c.color}`,display:"flex",alignItems:"flex-start",gap:12}}>
+          <div style={{flex:1}}><div style={{fontWeight:700,color:C.navy,fontSize:14,marginBottom:4}}>{a.titre}</div><div style={{fontSize:12,color:C.gray}}>{a.duree} de lecture</div><div style={{display:"flex",gap:5,marginTop:7,flexWrap:"wrap"}}>{a.tags.slice(0,3).map(t=><span key={t} style={{background:C.light,color:C.blue,borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:600}}>#{t}</span>)}</div></div>
+          <div style={{color:C.gray,fontSize:20,flexShrink:0}}>›</div>
+        </div>
+      ))}
+    </div>;
+  }
+  return<div>
+    <div style={{background:`linear-gradient(135deg,${C.navy},${C.blue})`,borderRadius:14,padding:20,marginBottom:20,color:"#fff"}}>
+      <div style={{fontSize:30,marginBottom:8}}>📚</div>
+      <div style={{fontWeight:800,fontSize:17,marginBottom:6}}>Espace Sensibilisation</div>
+      <div style={{fontSize:13,opacity:.85,lineHeight:1.6}}>Des ressources pour accompagner parents, élèves et enseignants vers la réussite globale de l'enfant.</div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+      {CATS.map(c=>(
+        <div key={c.id} onClick={()=>setCat(c.id)} style={{background:C.white,borderRadius:14,padding:18,cursor:"pointer",boxShadow:"0 2px 10px rgba(13,43,94,0.07)",borderTop:`4px solid ${c.color}`,textAlign:"center"}}>
+          <div style={{fontSize:36,marginBottom:8}}>{c.icone}</div>
+          <div style={{fontWeight:700,color:c.color,fontSize:13}}>{c.label}</div>
+          <div style={{fontSize:11,color:C.gray,marginTop:4}}>{ARTS[c.id]?.length||0} article{(ARTS[c.id]?.length||0)>1?"s":""}</div>
+        </div>
+      ))}
+    </div>
+    <Card>
+      <STit>⭐ Articles populaires</STit>
+      {[{c:"parents",a:ARTS.parents[0]},{c:"reussite",a:ARTS.reussite[0]},{c:"biblique",a:ARTS.biblique[0]}].map(({c:cid,a},i,arr)=>{
+        const cat2=CATS.find(x=>x.id===cid);
+        return<div key={i} onClick={()=>{setCat(cid);setArt(a);}} style={{display:"flex",gap:10,alignItems:"center",padding:"11px 0",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none",cursor:"pointer"}}>
+          <div style={{width:38,height:38,borderRadius:10,background:cat2.color+"15",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{cat2.icone}</div>
+          <div style={{flex:1}}><div style={{fontWeight:700,color:C.navy,fontSize:13}}>{a.titre}</div><div style={{fontSize:11,color:C.gray}}>{cat2.label} · {a.duree}</div></div>
+          <div style={{color:C.gray,fontSize:18}}>›</div>
+        </div>;
+      })}
+    </Card>
+  </div>;
+}
+
+// ── MODULE CLASSES ────────────────────────────────────────────────
+function ModuleClasses({db,addClass,deleteClass,addEleve,deleteEleve,moveEleve}){
+  const [vue,setVue]=useState("liste");
+  const [clsAct,setClsAct]=useState(null);
+  const [mCls,setMCls]=useState(false);
+  const [mElv,setMElv]=useState(false);
+  const [mMove,setMMove]=useState(null);
+  const [fil,setFil]=useState("Tous");
+  const [conf,setConf]=useState(null);
+  const [toast,setToast]=useState("");
+  const st=msg=>{setToast(msg);setTimeout(()=>setToast(""),3000);};
+  const cls=clsAct?db.classes.find(c=>c.id===clsAct.id):null;
+  const elvCls=cls?db.eleves.filter(e=>e.classe_id===cls.id):[];
+  const clsFil=db.classes.filter(c=>fil==="Tous"||(fil==="Collège"?NIVEAUX_COLLEGE:NIVEAUX_LYCEE).includes(c.niveau));
+
+  function doConf(){
+    if(conf.type==="classe"){deleteClass(conf.id);if(clsAct?.id===conf.id){setClsAct(null);setVue("liste");}st("Classe supprimée.");}
+    if(conf.type==="eleve"){deleteEleve(conf.id);st("Élève supprimé.");}
+    setConf(null);
+  }
+
+  // Formulaire classe inline
+  const [cycle,setCycle]=useState("Collège");
+  const [niveau,setNiveau]=useState("6ème");
+  const [section,setSection]=useState("A");
+  const [filiere,setFiliere]=useState("Générale");
+  const [effMax,setEffMax]=useState(35);
+  const [annee,setAnnee]=useState("2025-2026");
+  const [clsErr,setClsErr]=useState("");
+
+  // Formulaire élève inline
+  const [prenom,setPrenom]=useState(""),[nom,setNom]=useState("");
+  const [genre,setGenre]=useState("M"),[ddn,setDdn]=useState("");
+  const [emailP,setEmailP]=useState(""),[cid,setCid]=useState(db.classes[0]?.id||"");
+  const [elvErr,setElvErr]=useState("");
+
+  function saveCls(){
+    const niveaux=cycle==="Collège"?NIVEAUX_COLLEGE:NIVEAUX_LYCEE;
+    const isL=cycle==="Lycée";
+    const niv=niveaux.includes(niveau)?niveau:niveaux[0];
+    if(db.classes.some(c=>c.niveau===niv&&c.section===section&&c.annee===annee)){setClsErr(`La classe ${niv} ${section} existe déjà !`);return;}
+    addClass({niveau:niv,section,filiere:isL?filiere:null,effectif_max:parseInt(effMax),annee});
+    setClsErr("");setMCls(false);st(`Classe ${niv} ${section} créée !`);
+  }
+  function saveElv(){
+    if(!prenom.trim()||!nom.trim()){setElvErr("Prénom et nom obligatoires.");return;}
+    const c=db.classes.find(x=>x.id===parseInt(cid));
+    if(!c){setElvErr("Sélectionnez une classe.");return;}
+    if(db.eleves.filter(e=>e.classe_id===parseInt(cid)).length>=c.effectif_max){setElvErr(`Classe complète (max ${c.effectif_max}).`);return;}
+    addEleve({prenom:prenom.trim(),nom:nom.trim(),genre,date_naissance:ddn,email_parent:emailP||`${prenom.toLowerCase()}.parent@email.com`,classe_id:parseInt(cid)});
+    setPrenom("");setNom("");setDdn("");setEmailP("");setElvErr("");setMElv(false);st(`${prenom} ${nom} ajouté(e) !`);
+  }
+
+  if(vue==="detail"&&cls)return<div>
+    <Toast msg={toast}/>
+    {conf&&<Confirm label={conf.label} onOk={doConf} onCancel={()=>setConf(null)}/>}
+    {mElv&&<Modal title="➕ Ajouter un élève" onClose={()=>setMElv(false)}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><Inp label="Prénom" value={prenom} onChange={e=>setPrenom(e.target.value)} placeholder="Aya" required/><Inp label="Nom" value={nom} onChange={e=>setNom(e.target.value)} placeholder="Konan" required/></div>
+      <Sel label="Genre" value={genre} onChange={e=>setGenre(e.target.value)}><option value="M">Masculin</option><option value="F">Féminin</option></Sel>
+      <Inp label="Date de naissance" value={ddn} onChange={e=>setDdn(e.target.value)} placeholder="JJ/MM/AAAA"/>
+      <Inp label="Email parent" value={emailP} onChange={e=>setEmailP(e.target.value)} placeholder="parent@email.com" type="email"/>
+      <Sel label="Classe" value={cid} onChange={e=>setCid(e.target.value)} required>{db.classes.map(c=>{const nb=db.eleves.filter(e=>e.classe_id===c.id).length;return<option key={c.id} value={c.id}>{lblCls(c)} ({nb}/{c.effectif_max})</option>;})}</Sel>
+      {elvErr&&<div style={{background:"#FEF2F2",border:`1px solid #FECACA`,borderRadius:8,padding:"9px 12px",marginBottom:12,color:C.red,fontSize:13}}>⚠️ {elvErr}</div>}
+      <button onClick={saveElv} style={{width:"100%",padding:11,borderRadius:10,border:"none",background:`linear-gradient(135deg,${C.navy},${C.blue})`,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>➕ Ajouter l'élève</button>
+    </Modal>}
+    {mMove!==null&&<Modal title="🔄 Changer de classe" onClose={()=>setMMove(null)}>
+      {db.classes.map(c=>{const nb=db.eleves.filter(e=>e.classe_id===c.id).length,plein=nb>=c.effectif_max;
+        return<button key={c.id} onClick={()=>{if(!plein){moveEleve(mMove,c.id);setMMove(null);st("Élève transféré !");}}} disabled={plein}
+          style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"12px 14px",borderRadius:10,border:`1.5px solid ${C.border}`,background:plein?"#f9f9f9":"#fff",cursor:plein?"not-allowed":"pointer",marginBottom:8,opacity:plein?.6:1}}>
+          <div><div style={{fontWeight:700,color:C.navy,fontSize:13}}>{lblCls(c)}</div><div style={{fontSize:11,color:C.gray}}>{cycleCls(c)}</div></div>
+          <Bdg label={`${nb}/${c.effectif_max}`} color={plein?C.red:C.green} bg={plein?"#FDECEC":"#E8F8EE"}/>
+        </button>;})
+      }
+    </Modal>}
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+      <button onClick={()=>setVue("liste")} style={{background:C.light,border:"none",color:C.navy,padding:"7px 14px",borderRadius:20,cursor:"pointer",fontWeight:700,fontSize:12}}>← Retour</button>
+      <div style={{flex:1}}><div style={{fontWeight:800,color:C.navy,fontSize:16}}>{lblCls(cls)}</div><div style={{fontSize:12,color:C.gray}}>{cycleCls(cls)} · {cls.annee}</div></div>
+      <button onClick={()=>setMElv(true)} style={{background:C.green,border:"none",color:"#fff",padding:"8px 14px",borderRadius:20,cursor:"pointer",fontWeight:700,fontSize:12}}>➕ Élève</button>
+    </div>
+    <div style={{display:"flex",gap:10,marginBottom:14}}>
+      {[["🎒",elvCls.length,"Élèves",C.blue],["📊",elvCls.length?Math.round(elvCls.reduce((s,e)=>s+calcMoy(db.notes[e.id]),0)/elvCls.length*10)/10:0,"Moy.",C.accent],["✅",`${elvCls.filter(e=>(db.presences[e.id]?.[0]?.s||"")!=="Absent").length}/${elvCls.length}`,"Présents",C.green]].map(([ic,v,l,col])=>(
+        <div key={l} style={{background:C.white,borderRadius:10,padding:"12px 10px",flex:1,boxShadow:"0 2px 8px rgba(13,43,94,0.07)",borderTop:`3px solid ${col}`,textAlign:"center"}}>
+          <div style={{fontSize:20}}>{ic}</div><div style={{fontWeight:800,fontSize:17,color:col}}>{v}</div><div style={{fontSize:11,color:C.gray}}>{l}</div>
+        </div>
+      ))}
+    </div>
+    <Card>
+      <STit>👨‍🎓 Élèves</STit>
+      {elvCls.length===0?<div style={{textAlign:"center",padding:"24px 0",color:C.gray}}><div style={{fontSize:32,marginBottom:8}}>🎒</div>Aucun élève.<br/><button onClick={()=>setMElv(true)} style={{marginTop:12,background:C.blue,border:"none",color:"#fff",padding:"8px 16px",borderRadius:20,cursor:"pointer",fontWeight:700,fontSize:12}}>➕ Ajouter</button></div>
+        :elvCls.map((e,i)=>{const moy=calcMoy(db.notes[e.id]);return(
+        <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 0",borderBottom:i<elvCls.length-1?`1px solid ${C.border}`:"none"}}>
+          <Av t={ini(e.prenom,e.nom)} size={38} bg={e.genre==="F"?C.purple:C.blue}/>
+          <div style={{flex:1}}><div style={{fontWeight:700,color:C.navy,fontSize:13}}>{fullName(e)}</div><div style={{fontSize:11,color:C.gray}}>{e.date_naissance||"—"} · {e.email_parent}</div></div>
+          <div style={{textAlign:"center",minWidth:44}}><div style={{fontWeight:800,color:moy>=10?C.green:C.red,fontSize:14}}>{moy}/20</div><div style={{fontSize:10,color:C.gray}}>moy.</div></div>
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            <button onClick={()=>setMMove(e.id)} style={{background:C.light,border:"none",color:C.blue,padding:"3px 8px",borderRadius:8,cursor:"pointer",fontSize:11,fontWeight:600}}>🔄</button>
+            <button onClick={()=>setConf({type:"eleve",id:e.id,label:fullName(e)})} style={{background:"#FDECEC",border:"none",color:C.red,padding:"3px 8px",borderRadius:8,cursor:"pointer",fontSize:11,fontWeight:600}}>✕</button>
+          </div>
+        </div>
+      );})}
+    </Card>
+    <Card>
+      <STit>📊 Capacité</STit>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:C.navy,marginBottom:8,fontWeight:600}}>
+        <span>{elvCls.length} élève{elvCls.length>1?"s":""} inscrits</span>
+        <span>{cls.effectif_max-elvCls.length} place{cls.effectif_max-elvCls.length>1?"s":""} disponibles</span>
+      </div>
+      <div style={{background:C.border,borderRadius:8,height:12}}>
+        <div style={{width:`${Math.min(elvCls.length/cls.effectif_max*100,100)}%`,background:elvCls.length>=cls.effectif_max?C.red:elvCls.length/cls.effectif_max>0.8?C.accent:C.green,height:12,borderRadius:8,transition:"width .5s"}}/>
+      </div>
+      <div style={{fontSize:12,color:C.gray,marginTop:6}}>{Math.round(elvCls.length/cls.effectif_max*100)}% · Max {cls.effectif_max}</div>
+    </Card>
+  </div>;
+
+  return<div>
+    <Toast msg={toast}/>
+    {conf&&<Confirm label={conf.label} onOk={doConf} onCancel={()=>setConf(null)}/>}
+    {mCls&&<Modal title="🏫 Nouvelle classe" onClose={()=>setMCls(false)}>
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        {["Collège","Lycée"].map(c=><button key={c} onClick={()=>{setCycle(c);setNiveau(c==="Collège"?NIVEAUX_COLLEGE[0]:NIVEAUX_LYCEE[0]);}} style={{flex:1,padding:"10px",borderRadius:10,border:`2px solid ${cycle===c?C.blue:C.border}`,background:cycle===c?C.light:"#fff",color:cycle===c?C.blue:C.gray,cursor:"pointer",fontWeight:700,fontSize:13}}>{c==="Collège"?"🏫 Collège":"🎓 Lycée"}</button>)}
+      </div>
+      <Sel label="Niveau" value={niveau} onChange={e=>setNiveau(e.target.value)} required>{(cycle==="Collège"?NIVEAUX_COLLEGE:NIVEAUX_LYCEE).map(n=><option key={n}>{n}</option>)}</Sel>
+      <Sel label="Section" value={section} onChange={e=>setSection(e.target.value)} required>{SECTIONS.map(s=><option key={s}>{s}</option>)}</Sel>
+      {cycle==="Lycée"&&<Sel label="Filière" value={filiere} onChange={e=>setFiliere(e.target.value)} required>{FILIERES.map(f=><option key={f}>{f}</option>)}</Sel>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <Inp label="Effectif max" value={effMax} onChange={e=>setEffMax(e.target.value)} type="number"/>
+        <Inp label="Année" value={annee} onChange={e=>setAnnee(e.target.value)} placeholder="2025-2026"/>
+      </div>
+      <div style={{background:C.light,borderRadius:10,padding:12,marginBottom:14,textAlign:"center"}}>
+        <div style={{fontWeight:800,color:C.navy,fontSize:16}}>{niveau} {section}{cycle==="Lycée"?` · ${filiere}`:""}</div>
+        <div style={{fontSize:12,color:C.gray}}>{cycle} · {annee} · Max {effMax}</div>
+      </div>
+      {clsErr&&<div style={{background:"#FEF2F2",border:`1px solid #FECACA`,borderRadius:8,padding:"9px 12px",marginBottom:12,color:C.red,fontSize:13}}>⚠️ {clsErr}</div>}
+      <button onClick={saveCls} style={{width:"100%",padding:11,borderRadius:10,border:"none",background:C.green,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>✅ Créer la classe</button>
+    </Modal>}
+    {mElv&&<Modal title="➕ Ajouter un élève" onClose={()=>setMElv(false)}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><Inp label="Prénom" value={prenom} onChange={e=>setPrenom(e.target.value)} placeholder="Aya" required/><Inp label="Nom" value={nom} onChange={e=>setNom(e.target.value)} placeholder="Konan" required/></div>
+      <Sel label="Genre" value={genre} onChange={e=>setGenre(e.target.value)}><option value="M">Masculin</option><option value="F">Féminin</option></Sel>
+      <Inp label="Date de naissance" value={ddn} onChange={e=>setDdn(e.target.value)} placeholder="JJ/MM/AAAA"/>
+      <Inp label="Email parent" value={emailP} onChange={e=>setEmailP(e.target.value)} placeholder="parent@email.com" type="email"/>
+      <Sel label="Classe" value={cid} onChange={e=>setCid(e.target.value)} required>{db.classes.map(c=>{const nb=db.eleves.filter(e=>e.classe_id===c.id).length;return<option key={c.id} value={c.id}>{lblCls(c)} ({nb}/{c.effectif_max})</option>;})}</Sel>
+      {elvErr&&<div style={{background:"#FEF2F2",border:`1px solid #FECACA`,borderRadius:8,padding:"9px 12px",marginBottom:12,color:C.red,fontSize:13}}>⚠️ {elvErr}</div>}
+      <button onClick={saveElv} style={{width:"100%",padding:11,borderRadius:10,border:"none",background:`linear-gradient(135deg,${C.navy},${C.blue})`,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>➕ Ajouter l'élève</button>
+    </Modal>}
+
+    <div style={{display:"flex",gap:7,marginBottom:16,flexWrap:"wrap"}}>
+      {["Tous","Collège","Lycée"].map(f=><button key={f} onClick={()=>setFil(f)} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,background:fil===f?C.navy:C.light,color:fil===f?"#fff":C.navy,fontWeight:600}}>{f}</button>)}
+      <button onClick={()=>setMElv(true)} style={{padding:"6px 14px",borderRadius:20,border:"none",background:C.blue,color:"#fff",cursor:"pointer",fontWeight:700,fontSize:12}}>➕ Élève</button>
+      <button onClick={()=>setMCls(true)} style={{marginLeft:"auto",padding:"6px 14px",borderRadius:20,border:"none",background:C.green,color:"#fff",cursor:"pointer",fontWeight:700,fontSize:12}}>➕ Classe</button>
+    </div>
+    <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+      {[["🏫",db.classes.filter(c=>NIVEAUX_COLLEGE.includes(c.niveau)).length,"Collège",C.blue],["🎓",db.classes.filter(c=>NIVEAUX_LYCEE.includes(c.niveau)).length,"Lycée",C.purple],["🎒",db.eleves.length,"Élèves",C.green]].map(([ic,v,l,col])=>(
+        <div key={l} style={{background:C.white,borderRadius:12,padding:"12px 14px",flex:1,minWidth:90,boxShadow:"0 2px 10px rgba(13,43,94,0.07)",borderLeft:`4px solid ${col}`}}>
+          <div style={{fontSize:20}}>{ic}</div><div style={{fontWeight:800,fontSize:20,color:col}}>{v}</div><div style={{fontSize:11,color:C.gray}}>{l}</div>
+        </div>
+      ))}
+    </div>
+    {clsFil.length===0&&<Card style={{textAlign:"center",padding:40}}><div style={{fontSize:40,marginBottom:10}}>🏫</div><div style={{fontWeight:700,color:C.navy,marginBottom:6}}>Aucune classe</div><button onClick={()=>setMCls(true)} style={{background:C.green,border:"none",color:"#fff",padding:"10px 20px",borderRadius:20,cursor:"pointer",fontWeight:700,fontSize:13}}>➕ Créer une classe</button></Card>}
+    {["Collège","Lycée"].map(cyc=>{
+      const niveaux=cyc==="Collège"?NIVEAUX_COLLEGE:NIVEAUX_LYCEE;
+      const cls2=clsFil.filter(c=>niveaux.includes(c.niveau));
+      if(!cls2.length||(fil!=="Tous"&&fil!==cyc))return null;
+      return<div key={cyc}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+          <span style={{fontSize:18}}>{cyc==="Collège"?"🏫":"🎓"}</span>
+          <span style={{fontWeight:800,color:C.navy,fontSize:15}}>{cyc}</span>
+          <Bdg label={`${cls2.length} classe${cls2.length>1?"s":""}`} color={cyc==="Collège"?C.blue:C.purple} bg={cyc==="Collège"?C.light:"#F3E8FF"}/>
+        </div>
+        {niveaux.map(niv=>{
+          const clsN=cls2.filter(c=>c.niveau===niv);if(!clsN.length)return null;
+          return<div key={niv} style={{marginBottom:14}}>
+            <div style={{fontSize:12,color:C.gray,fontWeight:600,marginBottom:6,paddingLeft:4}}>{niv}</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {clsN.map(c=>{const nb=db.eleves.filter(e=>e.classe_id===c.id).length,plein=nb>=c.effectif_max;
+                return<div key={c.id} style={{background:C.white,borderRadius:12,padding:14,boxShadow:"0 2px 10px rgba(13,43,94,0.06)",border:`1.5px solid ${C.border}`,cursor:"pointer"}} onClick={()=>{setClsAct(c);setVue("detail");}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                    <div><div style={{fontWeight:800,color:C.navy,fontSize:15}}>{c.niveau} {c.section}</div>{c.filiere&&<div style={{fontSize:11,color:C.purple,fontWeight:600}}>{c.filiere}</div>}</div>
+                    <button onClick={e=>{e.stopPropagation();setConf({type:"classe",id:c.id,label:lblCls(c)});}} style={{background:"#FDECEC",border:"none",color:C.red,width:24,height:24,borderRadius:"50%",cursor:"pointer",fontSize:13,flexShrink:0}}>×</button>
+                  </div>
+                  <div style={{background:C.border,borderRadius:4,height:5,marginBottom:6}}><div style={{width:`${Math.round(nb/c.effectif_max*100)}%`,background:plein?C.red:C.green,height:5,borderRadius:4}}/></div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.gray}}><span>{nb}/{c.effectif_max} élèves</span><span style={{color:plein?C.red:C.green,fontWeight:700}}>{plein?"Complet":`${c.effectif_max-nb} places`}</span></div>
+                </div>;
+              })}
+            </div>
+          </div>;
+        })}
+      </div>;
+    })}
+  </div>;
+}
+
+// ── PAGE CONNEXION ────────────────────────────────────────────────
+function PageConnexion({onLogin}){
+  const [id,setId]=useState(""),  [pwd,setPwd]=useState("");
+  const [err,setErr]=useState(""), [load,setLoad]=useState(false), [show,setShow]=useState(false);
+  function login(){
+    setErr("");setLoad(true);
+    setTimeout(()=>{const c=COMPTES.find(c=>c.identifiant===id.trim()&&c.mdp===pwd);c?onLogin(c):setErr("Identifiant ou mot de passe incorrect.");setLoad(false);},600);
+  }
+  const inp={width:"100%",padding:"11px 14px",borderRadius:10,fontSize:14,border:`1.5px solid ${err?C.red:C.border}`,outline:"none",background:C.bg,color:C.navy,boxSizing:"border-box",fontFamily:"inherit"};
+  return<div style={{minHeight:"100vh",background:`linear-gradient(145deg,${C.navy},#1A3A6B,#1A4FA0)`,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
+    <div style={{textAlign:"center",marginBottom:28}}>
+      <div style={{fontSize:50,marginBottom:6}}>🏫</div>
+      <div style={{color:"#fff",fontWeight:900,fontSize:26}}>EduTrack</div>
+      <div style={{color:"rgba(255,255,255,0.55)",fontSize:13,marginTop:3}}>Plateforme de gestion scolaire</div>
+    </div>
+    <div style={{background:C.white,borderRadius:20,padding:"28px 24px",width:"100%",maxWidth:370,boxShadow:"0 20px 60px rgba(0,0,0,0.25)"}}>
+      <div style={{fontWeight:800,color:C.navy,fontSize:18,marginBottom:2}}>Connexion</div>
+      <div style={{color:C.gray,fontSize:13,marginBottom:22}}>Accédez à votre espace sécurisé</div>
+      <label style={{display:"block",fontSize:11,fontWeight:700,color:C.gray,marginBottom:5,textTransform:"uppercase",letterSpacing:.5}}>Identifiant</label>
+      <input style={inp} placeholder="Votre identifiant" value={id} onChange={e=>{setId(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&login()}/>
+      <label style={{display:"block",fontSize:11,fontWeight:700,color:C.gray,margin:"14px 0 5px",textTransform:"uppercase",letterSpacing:.5}}>Mot de passe</label>
+      <div style={{position:"relative"}}>
+        <input style={inp} type={show?"text":"password"} placeholder="Votre mot de passe" value={pwd} onChange={e=>{setPwd(e.target.value);setErr("");}} onKeyDown={e=>e.key==="Enter"&&login()}/>
+        <button onClick={()=>setShow(!show)} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",fontSize:15,color:C.gray}}>{show?"🙈":"👁️"}</button>
+      </div>
+      {err&&<div style={{background:"#FEF2F2",border:`1px solid #FECACA`,borderRadius:8,padding:"9px 12px",marginTop:10,color:C.red,fontSize:13}}>⚠️ {err}</div>}
+      <button onClick={login} disabled={!id||!pwd||load} style={{width:"100%",marginTop:20,padding:12,borderRadius:12,border:"none",background:!id||!pwd?C.border:`linear-gradient(135deg,${C.navy},${C.blue})`,color:!id||!pwd?C.gray:"#fff",fontWeight:700,fontSize:15,cursor:!id||!pwd?"not-allowed":"pointer"}}>
+        {load?"Connexion…":"Se connecter"}
+      </button>
+      <div style={{marginTop:22,borderTop:`1px solid ${C.border}`,paddingTop:14}}>
+        <div style={{fontSize:11,color:C.gray,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>Comptes démo</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+          {COMPTES.map(c=>{const m=ROLE_META[c.role];return<button key={c.id} onClick={()=>{setId(c.identifiant);setPwd(c.mdp);setErr("");}} style={{background:m.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"7px 9px",cursor:"pointer",textAlign:"left"}}>
+            <div style={{fontSize:11,fontWeight:700,color:m.color}}>{m.icon} {m.label}</div>
+            <div style={{fontSize:10,color:C.gray,marginTop:1}}>{c.identifiant}</div>
+          </button>;})}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+// ── DASHBOARDS ────────────────────────────────────────────────────
+function DashAdmin({db,saving,...A}){
+  const [tab,setTab]=useState("classes");
+  if(!db)return<div style={{textAlign:"center",padding:40,color:C.gray}}>Chargement…</div>;
+  const TABS=[["classes","🏫 Classes"],["notes","📝 Notes"],["emails","📧 Emails"],["visites","🏠 Visites"],["protection","🛡️ Protection"],["sensi","📚 Sensibilisation"],["stats","📊 Stats"]];
+  return<div>
+    <div style={{display:"flex",gap:5,marginBottom:16,flexWrap:"wrap"}}>
+      {TABS.map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{padding:"6px 11px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,background:tab===k?C.navy:C.light,color:tab===k?"#fff":C.navy,fontWeight:600}}>{l}</button>)}
+      <button onClick={A.resetDB} style={{marginLeft:"auto",padding:"6px 10px",borderRadius:20,border:`1px solid ${C.border}`,cursor:"pointer",fontSize:11,background:"#fff",color:C.gray}}>🔄 Reset</button>
+    </div>
+    {tab==="classes"&&<ModuleClasses db={db} addClass={A.addClass} deleteClass={A.deleteClass} addEleve={A.addEleve} deleteEleve={A.deleteEleve} moveEleve={A.moveEleve}/>}
+    {tab==="notes"&&<Card>
+      <STit>📝 Notes de tous les élèves</STit>
+      {db.eleves.map((e,i)=>(
+        <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 0",borderBottom:i<db.eleves.length-1?`1px solid ${C.border}`:"none"}}>
+          <Av t={ini(e.prenom,e.nom)} bg={e.genre==="F"?C.purple:C.blue}/>
+          <div style={{flex:1}}><div style={{fontWeight:700,color:C.navy,fontSize:14}}>{fullName(e)}</div><div style={{fontSize:12,color:C.gray}}>{db.classes.find(c=>c.id===e.classe_id)?lblCls(db.classes.find(c=>c.id===e.classe_id)):"Sans classe"}</div></div>
+          <div style={{textAlign:"right"}}><div style={{fontWeight:800,color:calcMoy(db.notes[e.id])>=10?C.green:C.red}}>{calcMoy(db.notes[e.id])}/20</div><div style={{fontSize:11,color:C.gray}}>{countAbs(db.presences[e.id])} abs.</div></div>
+        </div>
+      ))}
+    </Card>}
+    {tab==="emails"&&<ModuleEmails db={db} addEmail={A.addEmail}/>}
+    {tab==="visites"&&<ModuleVisites db={db} addVisite={A.addVisite} updVisite={A.updVisite}/>}
+    {tab==="protection"&&<ModuleProtection db={db} addSignal={A.addSignal} updSignal={A.updSignal}/>}
+    {tab==="sensi"&&<ModuleSensibilisation/>}
+    {tab==="stats"&&<div>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
+        {[["🏫",db.classes.length,"Classes",C.blue],["🎒",db.eleves.length,"Élèves",C.green],["📧",db.emails_envoyes?.length||0,"Emails",C.purple],["📊",db.eleves.length?Math.round(db.eleves.reduce((s,e)=>s+calcMoy(db.notes[e.id]),0)/db.eleves.length*10)/10:0,"Moy.",C.accent],["🏠",(db.visites||[]).length,"Visites",C.orange],["🛡️",(db.signalements||[]).length,"Signalements",C.red]].map(([ic,v,l,col])=>(
+          <div key={l} style={{background:C.white,borderRadius:12,padding:"14px 12px",flex:1,minWidth:90,boxShadow:"0 2px 10px rgba(13,43,94,0.07)",borderTop:`4px solid ${col}`}}>
+            <div style={{fontSize:22}}>{ic}</div><div style={{fontWeight:800,fontSize:18,color:col}}>{v}</div><div style={{fontSize:12,color:C.gray}}>{l}</div>
+          </div>
+        ))}
+      </div>
+      <Card>
+        <STit>📋 Répartition par classe</STit>
+        {db.classes.map((c,i)=>{const nb=db.eleves.filter(e=>e.classe_id===c.id).length;return(
+          <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<db.classes.length-1?`1px solid ${C.border}`:"none"}}>
+            <div style={{flex:1}}><div style={{fontWeight:700,color:C.navy,fontSize:13}}>{lblCls(c)}</div><div style={{fontSize:11,color:C.gray}}>{cycleCls(c)}</div></div>
+            <div style={{width:80,background:C.border,borderRadius:4,height:6}}><div style={{width:`${Math.min(nb/c.effectif_max*100,100)}%`,background:C.blue,height:6,borderRadius:4}}/></div>
+            <Bdg label={`${nb}/${c.effectif_max}`} color={C.blue} bg={C.light}/>
+          </div>
+        );})}
+      </Card>
+    </div>}
+  </div>;
+}
+
+function DashEnseignant({db,updateNote}){
+  const [tab,setTab]=useState("notes");
+  const [sel,setSel]=useState(1);
+  if(!db)return<div style={{textAlign:"center",padding:40,color:C.gray}}>Chargement…</div>;
+  const notes=db.notes[sel]||[];
+  return<div>
+    <div style={{display:"flex",gap:7,marginBottom:16,flexWrap:"wrap"}}>
+      {[["notes","📝 Notes"],["presences","📅 Présences"],["sensi","📚 Sensibilisation"]].map(([k,l])=>(
+        <button key={k} onClick={()=>setTab(k)} style={{padding:"7px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,background:tab===k?C.blue:C.light,color:tab===k?"#fff":C.navy,fontWeight:600}}>{l}</button>
+      ))}
+    </div>
+    {tab==="notes"&&<Card>
+      <STit>📝 Saisie des notes</STit>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+        {db.eleves.map(e=><button key={e.id} onClick={()=>setSel(e.id)} style={{padding:"5px 12px",borderRadius:20,border:"none",cursor:"pointer",fontSize:12,background:sel===e.id?C.blue:C.light,color:sel===e.id?"#fff":C.navy,fontWeight:600}}>{fullName(e)}</button>)}
+      </div>
+      {notes.map((n,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<notes.length-1?`1px solid ${C.border}`:"none"}}>
+          <div style={{width:130,fontSize:13,color:C.navy,fontWeight:600}}>{n.m}</div>
+          <BarN note={n.n}/>
+          <input type="number" min={0} max={20} step={0.5} value={n.n} onChange={e=>updateNote(sel,i,parseFloat(e.target.value)||0)}
+            style={{width:58,padding:"4px 6px",borderRadius:8,border:`1.5px solid ${C.border}`,fontSize:14,fontWeight:700,color:n.n>=10?C.green:C.red,textAlign:"center"}}/>
+          <span style={{fontSize:12,color:C.gray}}>/20</span>
+        </div>
+      ))}
+    </Card>}
+    {tab==="presences"&&<Card>
+      <STit>📅 Présences du jour</STit>
+      {db.eleves.map((e,i)=>{const p=db.presences[e.id]?.[0];return(
+        <div key={e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:i<db.eleves.length-1?`1px solid ${C.border}`:"none"}}>
+          <Av t={ini(e.prenom,e.nom)} size={32} bg={C.blue}/>
+          <div style={{flex:1,fontSize:13,fontWeight:600,color:C.navy}}>{fullName(e)}</div>
+          <Bdg label={p?.s||"Présent"} color={p?.s==="Absent"?C.red:p?.s==="Retard"?C.accent:C.green} bg={p?.s==="Absent"?"#FDECEC":p?.s==="Retard"?"#FEF3E2":"#E8F8EE"}/>
+        </div>
+      );})}
+    </Card>}
+    {tab==="sensi"&&<ModuleSensibilisation/>}
+  </div>;
+}
+
+function DashParent({db,user}){
+  const [tab,setTab]=useState("bulletin");
+  const [exp,setExp]=useState(false);
+  if(!db)return<div style={{textAlign:"center",padding:40,color:C.gray}}>Chargement…</div>;
+  const eleve=db.eleves.find(e=>e.id===(user.eleveId||1))||db.eleves[0];
+  const notes=db.notes[eleve?.id]||[];
+  const pres=db.presences[eleve?.id]||[];
+  const classe=db.classes.find(c=>c.id===eleve?.classe_id);
+  const moy=calcMoy(notes),abs=countAbs(pres);
+  const emailsP=db.emails_envoyes?.filter(e=>e.destinataire===eleve.email_parent)||[];
+  async function doExport(){setExp(true);try{await exportPDF({...eleve,classeLabel:classe?lblCls(classe):"—"},notes,pres);}catch(e){alert("Erreur PDF: "+e.message);}setExp(false);}
+  return<div>
+    <div style={{background:`linear-gradient(135deg,${C.navy},${C.blue})`,borderRadius:14,padding:18,marginBottom:14,color:"#fff"}}>
+      <div style={{display:"flex",gap:14,alignItems:"center"}}>
+        <Av t={ini(eleve.prenom,eleve.nom)} size={48} bg="rgba(255,255,255,0.2)"/>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:800,fontSize:17}}>{fullName(eleve)}</div>
+          <div style={{fontSize:12,opacity:.75}}>{classe?lblCls(classe):"—"}</div>
+          <div style={{marginTop:7,display:"flex",gap:7,flexWrap:"wrap"}}>
+            <Bdg label={`Moy. ${moy}/20`} color="#fff" bg="rgba(255,255,255,0.2)"/>
+            <Bdg label={`${abs} abs.`} color="#fff" bg="rgba(255,255,255,0.2)"/>
+          </div>
+        </div>
+        <button onClick={doExport} disabled={exp} style={{background:C.accent,border:"none",color:"#fff",padding:"8px 14px",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:12,flexShrink:0}}>{exp?"…":"📄 PDF"}</button>
+      </div>
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+      {[["bulletin","📊 Bulletin"],["presences","📅 Présences"],["notifs","🔔 Notifs"],["sensi","📚 Sensibilisation"]].map(([k,l])=>(
+        <button key={k} onClick={()=>setTab(k)} style={{padding:"6px 12px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,background:tab===k?C.purple:C.light,color:tab===k?"#fff":C.navy,fontWeight:600}}>{l}</button>
+      ))}
+    </div>
+    {tab==="bulletin"&&<Card>
+      <STit>📊 Résultats par matière</STit>
+      {notes.map((n,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<notes.length-1?`1px solid ${C.border}`:"none"}}>
+          <div style={{width:130,fontSize:13,color:C.navy,fontWeight:600}}>{n.m}</div>
+          <BarN note={n.n}/>
+          <div style={{fontWeight:700,color:n.n>=10?C.green:C.red,width:38,textAlign:"right"}}>{n.n}/20</div>
+        </div>
+      ))}
+      <div style={{marginTop:12,padding:"10px 12px",background:moy>=10?"#E8F8EE":"#FDECEC",borderRadius:8,display:"flex",justifyContent:"space-between"}}>
+        <span style={{fontWeight:700,color:moy>=10?C.green:C.red}}>Moyenne : {moy}/20</span>
+        <span style={{fontSize:12,color:C.gray}}>{moy>=16?"Félicitations":moy>=14?"Compliments":moy>=12?"Encouragements":moy>=10?"Passable":"À améliorer"}</span>
+      </div>
+    </Card>}
+    {tab==="presences"&&<Card>
+      <STit>📅 Présences récentes</STit>
+      {pres.map((p,i)=>(
+        <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 0",borderBottom:i<pres.length-1?`1px solid ${C.border}`:"none"}}>
+          <div style={{fontSize:13,color:C.gray,width:90}}>{p.date}</div>
+          <Bdg label={p.s} color={p.s==="Présent"?C.green:p.s==="Retard"?C.accent:C.red} bg={p.s==="Présent"?"#E8F8EE":p.s==="Retard"?"#FEF3E2":"#FDECEC"}/>
+          {p.motif&&<span style={{fontSize:12,color:C.gray}}>{p.motif}</span>}
+        </div>
+      ))}
+    </Card>}
+    {tab==="notifs"&&<Card>
+      <STit>🔔 Notifications reçues ({emailsP.length})</STit>
+      {emailsP.length===0?<div style={{textAlign:"center",padding:"20px 0",color:C.gray}}>Aucune notification.</div>
+        :emailsP.map((e,i)=>(
+        <div key={i} style={{display:"flex",gap:10,padding:"11px 0",borderBottom:i<emailsP.length-1?`1px solid ${C.border}`:"none"}}>
+          <span style={{fontSize:20}}>{e.icone}</span>
+          <div style={{flex:1}}><div style={{fontWeight:700,color:C.navy,fontSize:13}}>{e.sujet}</div><div style={{fontSize:11,color:C.gray}}>{e.date}</div></div>
+          <Bdg label="Reçu" color={C.green} bg="#E8F8EE"/>
+        </div>
+      ))}
+    </Card>}
+    {tab==="sensi"&&<ModuleSensibilisation/>}
+  </div>;
+}
+
+function DashEleve({db,user}){
+  const [tab,setTab]=useState("notes");
+  const [exp,setExp]=useState(false);
+  if(!db)return<div style={{textAlign:"center",padding:40,color:C.gray}}>Chargement…</div>;
+  const eleve=db.eleves.find(e=>e.id===(user.eleveId||1))||db.eleves[0];
+  const notes=db.notes[eleve?.id]||[];
+  const pres=db.presences[eleve?.id]||[];
+  const classe=db.classes.find(c=>c.id===eleve?.classe_id);
+  const moy=calcMoy(notes),abs=countAbs(pres);
+  async function doExport(){setExp(true);try{await exportPDF({...eleve,classeLabel:classe?lblCls(classe):"—"},notes,pres);}catch(e){alert("Erreur PDF: "+e.message);}setExp(false);}
+  return<div>
+    <div style={{display:"flex",gap:11,flexWrap:"wrap",marginBottom:14}}>
+      {[["🌟",`${moy}/20`,"Ma moyenne",moy>=10?C.green:C.red],["🏫",classe?lblCls(classe):"—","Ma classe",C.blue],["📅",abs,"Absences",C.accent]].map(([ic,v,l,col])=>(
+        <div key={l} style={{background:C.white,borderRadius:12,padding:"14px 12px",flex:1,minWidth:90,boxShadow:"0 2px 10px rgba(13,43,94,0.07)",borderTop:`4px solid ${col}`}}>
+          <div style={{fontSize:22}}>{ic}</div><div style={{fontWeight:800,fontSize:15,color:col}}>{v}</div><div style={{fontSize:12,color:C.gray}}>{l}</div>
+        </div>
+      ))}
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+      {[["notes","📚 Notes"],["presences","📅 Présences"],["sensi","📚 Sensibilisation"]].map(([k,l])=>(
+        <button key={k} onClick={()=>setTab(k)} style={{padding:"6px 12px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,background:tab===k?C.green:C.light,color:tab===k?"#fff":C.navy,fontWeight:600}}>{l}</button>
+      ))}
+      <button onClick={doExport} disabled={exp} style={{marginLeft:"auto",background:C.blue,border:"none",color:"#fff",padding:"6px 14px",borderRadius:20,cursor:"pointer",fontWeight:700,fontSize:11}}>{exp?"…":"📄 Mon bulletin"}</button>
+    </div>
+    {tab==="notes"&&<Card>
+      <STit>📚 Mes notes</STit>
+      {notes.map((n,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:i<notes.length-1?`1px solid ${C.border}`:"none"}}>
+          <div style={{width:140,fontSize:13,color:C.navy,fontWeight:600}}>{n.m}</div>
+          <BarN note={n.n}/>
+          <div style={{fontWeight:700,color:n.n>=10?C.green:C.red,width:38,textAlign:"right"}}>{n.n}/20</div>
+        </div>
+      ))}
+      <div style={{marginTop:12,padding:"10px 12px",background:moy>=10?"#E8F8EE":"#FDECEC",borderRadius:8}}>
+        <span style={{fontWeight:700,color:moy>=10?C.green:C.red}}>Moyenne : {moy}/20 · </span>
+        <span style={{fontSize:12,color:C.gray}}>{moy>=16?"Félicitations":moy>=14?"Compliments":moy>=12?"Encouragements":moy>=10?"Passable":"À améliorer"}</span>
+      </div>
+    </Card>}
+    {tab==="presences"&&<Card>
+      <STit>📅 Mes présences</STit>
+      {pres.map((p,i)=>(
+        <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 0",borderBottom:i<pres.length-1?`1px solid ${C.border}`:"none"}}>
+          <div style={{fontSize:13,color:C.gray,width:90}}>{p.date}</div>
+          <Bdg label={p.s} color={p.s==="Présent"?C.green:p.s==="Retard"?C.accent:C.red} bg={p.s==="Présent"?"#E8F8EE":p.s==="Retard"?"#FEF3E2":"#FDECEC"}/>
+        </div>
+      ))}
+    </Card>}
+    {tab==="sensi"&&<ModuleSensibilisation/>}
+  </div>;
+}
+
+// ── APP ───────────────────────────────────────────────────────────
+function App(){
+  const [user,setUser]=useState(null);
+  const A=useDB();
+  const {db,saving}=A;
+  const meta=user?ROLE_META[user.role]:null;
+  if(!user)return<PageConnexion onLogin={setUser}/>;
+  return<div style={{minHeight:"100vh",background:C.bg,fontFamily:"'Segoe UI',Arial,sans-serif"}}>
+    <div style={{background:`linear-gradient(135deg,${C.navy},${C.blue})`,padding:"12px 16px",display:"flex",alignItems:"center",gap:10}}>
+      <div style={{fontSize:20}}>🏫</div>
+      <div style={{flex:1}}>
+        <div style={{color:"#fff",fontWeight:800,fontSize:16,display:"flex",alignItems:"center",gap:6}}>
+          EduTrack {saving&&<span style={{width:7,height:7,borderRadius:"50%",background:C.accent,display:"inline-block",animation:"pulse 1s infinite"}}/>}
+        </div>
+        <div style={{color:"rgba(255,255,255,0.55)",fontSize:11}}>Année scolaire 2025-2026</div>
+      </div>
+      <Av t={user.av} size={30} bg="rgba(255,255,255,0.2)"/>
+      <button onClick={()=>setUser(null)} style={{background:"rgba(255,255,255,0.12)",border:"none",color:"#fff",padding:"5px 11px",borderRadius:16,cursor:"pointer",fontSize:11,fontWeight:600}}>Déconnexion</button>
+    </div>
+    <div style={{background:meta.bg,padding:"10px 16px",display:"flex",alignItems:"center",gap:10,borderBottom:`2px solid ${meta.color}22`}}>
+      <Av t={user.av} size={32} bg={meta.color}/>
+      <div><div style={{fontWeight:800,color:meta.color,fontSize:13}}>{user.nom}</div><div style={{fontSize:11,color:C.gray}}>{meta.icon} {meta.label}</div></div>
+      <div style={{marginLeft:"auto",background:C.green,color:"#fff",borderRadius:20,padding:"3px 9px",fontSize:11,fontWeight:700}}>● En ligne</div>
+    </div>
+    <div style={{maxWidth:640,margin:"0 auto",padding:"18px 14px"}}>
+      {user.role==="admin"      &&<DashAdmin      db={db} saving={saving} {...A}/>}
+      {user.role==="enseignant" &&<DashEnseignant db={db} updateNote={A.updateNote}/>}
+      {user.role==="parent"     &&<DashParent     db={db} user={user}/>}
+      {user.role==="eleve"      &&<DashEleve      db={db} user={user}/>}
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
